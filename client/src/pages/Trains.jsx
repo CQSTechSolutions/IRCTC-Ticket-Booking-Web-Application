@@ -6,6 +6,8 @@ import TrainList from '../components/trains/TrainList';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { toast } from 'react-hot-toast';
 
+const API_BASE_URL = 'http://localhost:3000/api';
+
 // Popular stations for quick selection
 const POPULAR_STATIONS = [
   { code: 'NDLS', name: 'New Delhi' },
@@ -23,26 +25,56 @@ const Trains = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Get search params from URL
+  // Get current date in YYYY-MM-DD format
+  const getCurrentDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Get search params from URL with current date as default
   const fromStation = searchParams.get('fromStation') || '';
   const toStation = searchParams.get('toStation') || '';
-  const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
+  const date = searchParams.get('date') || getCurrentDate();
 
   const fetchAllTrains = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('http://localhost:3000/api/trains');
-      if (response.data && response.data.data) {
+      const response = await axios.get(`${API_BASE_URL}/trains`);
+      
+      if (response.data?.success && response.data.data) {
+        // Transform each train to include journey details
         const transformedTrains = response.data.data.map(train => {
           const firstStation = train.stations[0];
           const lastStation = train.stations[train.stations.length - 1];
-          return transformTrainData(train, firstStation, lastStation);
+          
+          // Calculate duration
+          const duration = calculateDuration(
+            firstStation.departureTime,
+            lastStation.arrivalTime,
+            firstStation.day,
+            lastStation.day
+          );
+          
+          return {
+            ...train,
+            journey: {
+              fromStation: firstStation,
+              toStation: lastStation,
+              distance: lastStation.distance - firstStation.distance,
+              duration,
+              intermediateStations: train.stations.slice(1, -1)
+            }
+          };
         });
+        
         setTrains(transformedTrains);
       } else {
         setTrains([]);
-        setError('No train data available');
+        setError('No trains available');
       }
     } catch (error) {
       console.error('Error fetching trains:', error);
@@ -54,39 +86,18 @@ const Trains = () => {
     }
   };
 
-  const transformTrainData = (train, fromStn, toStn) => {
-    // Find the indices of the stations in the route
-    const fromIndex = train.stations.findIndex(s => s.code === fromStn.code);
-    const toIndex = train.stations.findIndex(s => s.code === toStn.code);
-    
-    // Calculate distance between stations
-    const distance = toStn.distance - fromStn.distance;
-    
-    // Calculate duration between stations
-    const duration = calculateJourneyTime(
-      fromStn.departureTime || fromStn.arrivalTime,
-      toStn.arrivalTime || toStn.departureTime,
-      fromStn.day,
-      toStn.day
-    );
-
-    // Calculate fares for all classes
-    const fares = {};
-    train.classes.forEach(cls => {
-      fares[cls] = Math.ceil(distance * train.farePerKm[cls]);
-    });
-
-    return {
-      ...train,
-      journey: {
-        fromStation: fromStn,
-        toStation: toStn,
-        distance,
-        duration,
-        intermediateStations: train.stations.slice(fromIndex + 1, toIndex),
-        fares
-      }
-    };
+  const calculateDuration = (fromTime, toTime, fromDay, toDay) => {
+    try {
+      const startDate = new Date(`2024-01-${fromDay}T${fromTime}`);
+      const endDate = new Date(`2024-01-${toDay}T${toTime}`);
+      const diff = endDate - startDate;
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      return { hours, minutes };
+    } catch (error) {
+      console.error('Error calculating duration:', error);
+      return { hours: 0, minutes: 0 };
+    }
   };
 
   const searchTrains = async (params) => {
@@ -94,33 +105,71 @@ const Trains = () => {
       setLoading(true);
       setError(null);
       
-      // Update URL with search params
-      setSearchParams(params);
-
+      // Validate station codes
       if (!params.fromStation || !params.toStation) {
-        await fetchAllTrains();
+        toast.error('Please select both stations');
         return;
       }
 
-      const response = await axios.get('http://localhost:3000/api/trains/search', {
+      // Ensure date is provided, use current date if not
+      const searchDate = params.date || getCurrentDate();
+      
+      // Update URL with search params
+      setSearchParams({ 
+        fromStation: params.fromStation, 
+        toStation: params.toStation, 
+        date: searchDate 
+      });
+
+      const response = await axios.get(`${API_BASE_URL}/trains/search`, {
         params: {
           fromStation: params.fromStation,
           toStation: params.toStation,
-          date: params.date
+          date: searchDate
         }
       });
 
-      if (response.data && response.data.data) {
+      if (response.data?.success && response.data.data) {
+        // Transform the response data to include proper journey details
         const transformedTrains = response.data.data.map(train => {
-          // Find the specified stations in the train's route
-          const fromStn = train.stations.find(s => s.code === params.fromStation);
-          const toStn = train.stations.find(s => s.code === params.toStation);
+          const fromStationIndex = train.stations.findIndex(s => s.stationCode === params.fromStation);
+          const toStationIndex = train.stations.findIndex(s => s.stationCode === params.toStation);
           
-          if (!fromStn || !toStn) return null;
+          if (fromStationIndex === -1 || toStationIndex === -1) return null;
           
-          return transformTrainData(train, fromStn, toStn);
+          const fromStation = train.stations[fromStationIndex];
+          const toStation = train.stations[toStationIndex];
+          
+          // Calculate duration between selected stations
+          const duration = calculateDuration(
+            fromStation.departureTime,
+            toStation.arrivalTime,
+            fromStation.day,
+            toStation.day
+          );
+          
+          // Calculate distance between selected stations
+          const distance = toStation.distance - fromStation.distance;
+          
+          // Calculate fares for the selected journey
+          const fares = {};
+          train.classes.forEach(cls => {
+            fares[cls] = Math.ceil(distance * train.farePerKm[cls]);
+          });
+          
+          return {
+            ...train,
+            journey: {
+              fromStation,
+              toStation,
+              distance,
+              duration,
+              fares,
+              intermediateStations: train.stations.slice(fromStationIndex + 1, toStationIndex)
+            }
+          };
         }).filter(Boolean); // Remove null entries
-
+        
         setTrains(transformedTrains);
         
         if (transformedTrains.length === 0) {
@@ -139,21 +188,6 @@ const Trains = () => {
       setTrains([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Helper function to calculate journey time
-  const calculateJourneyTime = (departure, arrival, departureDay, arrivalDay) => {
-    try {
-      const dept = new Date(`2024-01-${departureDay}T${departure}`);
-      const arr = new Date(`2024-01-${arrivalDay}T${arrival}`);
-      const diff = arr - dept;
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      return { hours, minutes };
-    } catch (error) {
-      console.error('Error calculating journey time:', error);
-      return { hours: 0, minutes: 0 };
     }
   };
 
@@ -182,7 +216,11 @@ const Trains = () => {
         <TrainSearch
           onSearch={searchTrains}
           popularStations={POPULAR_STATIONS}
-          initialValues={{ fromStation, toStation, date }}
+          initialValues={{ 
+            fromStation, 
+            toStation, 
+            date: date || getCurrentDate() 
+          }}
         />
 
         {loading ? (
@@ -213,7 +251,7 @@ const Trains = () => {
             </div>
             
             <TrainList
-              trains={trains || []}
+              trains={trains}
               fromStation={fromStation}
               toStation={toStation}
             />

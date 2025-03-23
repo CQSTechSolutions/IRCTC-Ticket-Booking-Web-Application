@@ -143,10 +143,10 @@ export const searchTrains = async (req, res) => {
             }
 
             // Calculate journey details
-            const fromStation = stations[fromIndex];
-            const toStation = stations[toIndex];
-            const distance = toStation.distance - fromStation.distance;
-            const journeyTime = calculateJourneyTime(fromStation.departureTime, toStation.arrivalTime, fromStation.day, toStation.day);
+            const fromStationObj = stations[fromIndex];
+            const toStationObj = stations[toIndex];
+            const distance = toStationObj.distance - fromStationObj.distance;
+            const journeyTime = calculateJourneyTime(fromStationObj.departureTime, toStationObj.arrivalTime, fromStationObj.day, toStationObj.day);
 
             // Calculate fares for all available classes
             const fares = {};
@@ -160,8 +160,8 @@ export const searchTrains = async (req, res) => {
             return {
                 ...train.toObject(),
                 journey: {
-                    fromStation: stations[fromIndex],
-                    toStation: stations[toIndex],
+                    fromStation: fromStationObj,
+                    toStation: toStationObj,
                     distance,
                     duration: journeyTime,
                     intermediateStations,
@@ -174,7 +174,7 @@ export const searchTrains = async (req, res) => {
         let filteredTrains = validTrains;
         if (date) {
             const journeyDate = new Date(date);
-            const dayOfWeek = journeyDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+            const dayOfWeek = journeyDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
             filteredTrains = validTrains.filter(train => train.runsOnDays[dayOfWeek]);
         }
 

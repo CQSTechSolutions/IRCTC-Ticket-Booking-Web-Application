@@ -1,19 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FaSearch, FaExchangeAlt, FaCalendarAlt, FaTimes } from 'react-icons/fa';
 import axios from 'axios';
+import { toast } from 'react-hot-toast';
 
-const TrainSearch = ({ onSearch, initialValues }) => {
-  const [searchParams, setSearchParams] = useState({
-    fromStation: initialValues?.fromStation || '',
-    toStation: initialValues?.toStation || '',
-    date: initialValues?.date || new Date().toISOString().split('T')[0]
-  });
-
+const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => {
+  const [fromStation, setFromStation] = useState(initialValues.fromStation || '');
+  const [toStation, setToStation] = useState(initialValues.toStation || '');
+  const [date, setDate] = useState(initialValues.date || getCurrentDate());
   const [stations, setStations] = useState([]);
   const [filteredFromStations, setFilteredFromStations] = useState([]);
   const [filteredToStations, setFilteredToStations] = useState([]);
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
+  const searchFormRef = useRef(null);
+
+  // Get current date in YYYY-MM-DD format
+  function getCurrentDate() {
+    const today = new Date();
+    // Use local timezone with explicit year, month, day formatting
+    const year = today.getFullYear();
+    // getMonth() is zero-based, so add 1 and pad with 0 if needed
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    // getDate() returns the day of the month
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Get maximum date (1 year from now)
+  function getMaxDate() {
+    const maxDate = new Date();
+    maxDate.setFullYear(maxDate.getFullYear() + 1);
+    const year = maxDate.getFullYear();
+    const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+    const day = String(maxDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 
   // Fetch all stations when component mounts
   useEffect(() => {
@@ -31,102 +52,120 @@ const TrainSearch = ({ onSearch, initialValues }) => {
               }));
             });
           });
-          setStations(Array.from(uniqueStations).map(station => JSON.parse(station)));
+          const stationsList = Array.from(uniqueStations).map(station => JSON.parse(station));
+          setStations(stationsList);
+          setFilteredFromStations(stationsList);
+          setFilteredToStations(stationsList);
         }
       } catch (error) {
         console.error('Error fetching stations:', error);
+        toast.error('Failed to fetch stations');
       }
     };
     fetchStations();
   }, []);
 
   useEffect(() => {
-    if (initialValues) {
-      setSearchParams({
-        fromStation: initialValues.fromStation || '',
-        toStation: initialValues.toStation || '',
-        date: initialValues.date || new Date().toISOString().split('T')[0]
-      });
+    // Handle clicks outside the search form
+    const handleClickOutside = (event) => {
+      if (searchFormRef.current && !searchFormRef.current.contains(event.target)) {
+        setShowFromDropdown(false);
+        setShowToDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filterStations = (input, type) => {
+    if (!input) {
+      return type === 'from' ? setFilteredFromStations(stations) : setFilteredToStations(stations);
     }
-  }, [initialValues]);
-
-  const handleFromStationChange = (e) => {
-    const value = e.target.value.toUpperCase();
-    setSearchParams(prev => ({ ...prev, fromStation: value }));
-    setFilteredFromStations(
-      stations.filter(station => 
-        station.code.includes(value) || 
-        station.name.toUpperCase().includes(value)
-      )
+    
+    const searchTerm = input.toLowerCase();
+    const filtered = stations.filter(station => 
+      station.code.toLowerCase().includes(searchTerm) || 
+      station.name.toLowerCase().includes(searchTerm)
     );
-    setShowFromDropdown(true);
-  };
-
-  const handleToStationChange = (e) => {
-    const value = e.target.value.toUpperCase();
-    setSearchParams(prev => ({ ...prev, toStation: value }));
-    setFilteredToStations(
-      stations.filter(station => 
-        station.code.includes(value) || 
-        station.name.toUpperCase().includes(value)
-      )
-    );
-    setShowToDropdown(true);
-  };
-
-  const handleStationSelect = (type, station) => {
-    setSearchParams(prev => ({
-      ...prev,
-      [type === 'from' ? 'fromStation' : 'toStation']: station.code
-    }));
+    
     if (type === 'from') {
+      setFilteredFromStations(filtered);
+    } else {
+      setFilteredToStations(filtered);
+    }
+  };
+
+  const handleStationInput = (value, type) => {
+    if (type === 'from') {
+      setFromStation(value.toUpperCase());
+      setShowFromDropdown(true);
+      filterStations(value, 'from');
+    } else {
+      setToStation(value.toUpperCase());
+      setShowToDropdown(true);
+      filterStations(value, 'to');
+    }
+  };
+
+  const handleStationSelect = (station, type) => {
+    if (type === 'from') {
+      setFromStation(station.code);
       setShowFromDropdown(false);
     } else {
+      setToStation(station.code);
       setShowToDropdown(false);
     }
   };
 
+  const handleSwapStations = () => {
+    setFromStation(toStation);
+    setToStation(fromStation);
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSearch(searchParams);
+    
+    if (!fromStation || !toStation) {
+      toast.error('Please select both stations');
+      return;
+    }
+
+    if (fromStation === toStation) {
+      toast.error('Please select different stations');
+      return;
+    }
+
+    const selectedDate = new Date(date);
+    const currentDate = new Date(getCurrentDate());
+    const maxDate = new Date(getMaxDate());
+
+    if (selectedDate < currentDate) {
+      toast.error('Please select a date from today onwards');
+      setDate(getCurrentDate());
+      return;
+    }
+
+    if (selectedDate > maxDate) {
+      toast.error('Please select a date within next year');
+      return;
+    }
+
+    onSearch({ fromStation, toStation, date });
   };
-
-  const handleSwapStations = () => {
-    setSearchParams(prev => ({
-      ...prev,
-      fromStation: prev.toStation,
-      toStation: prev.fromStation
-    }));
-  };
-
-  const handleReset = () => {
-    setSearchParams({
-      fromStation: '',
-      toStation: '',
-      date: new Date().toISOString().split('T')[0]
-    });
-    onSearch({ fromStation: '', toStation: '', date: new Date().toISOString().split('T')[0] });
-  };
-
-  // Get tomorrow's date for min date in date picker
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split('T')[0];
-
-  // Get date 4 months from now for max date
-  const maxDate = new Date();
-  maxDate.setMonth(maxDate.getMonth() + 4);
-  const maxDateStr = maxDate.toISOString().split('T')[0];
-
-  const hasSearchParams = searchParams.fromStation || searchParams.toStation;
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Search Trains</h2>
-        {hasSearchParams && (
+        {(fromStation || toStation) && (
           <button
-            onClick={handleReset}
+            onClick={() => {
+              setFromStation('');
+              setToStation('');
+              setDate(getCurrentDate());
+              onSearch({ fromStation: '', toStation: '', date: getCurrentDate() });
+            }}
             className="text-gray-500 hover:text-gray-700 flex items-center gap-1"
           >
             <FaTimes className="w-4 h-4" />
@@ -135,7 +174,7 @@ const TrainSearch = ({ onSearch, initialValues }) => {
         )}
       </div>
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form ref={searchFormRef} onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* From Station */}
           <div className="relative">
@@ -144,8 +183,8 @@ const TrainSearch = ({ onSearch, initialValues }) => {
             </label>
             <input
               type="text"
-              value={searchParams.fromStation}
-              onChange={handleFromStationChange}
+              value={fromStation}
+              onChange={(e) => handleStationInput(e.target.value, 'from')}
               onFocus={() => setShowFromDropdown(true)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter station code or name"
@@ -156,7 +195,7 @@ const TrainSearch = ({ onSearch, initialValues }) => {
                   <div
                     key={index}
                     className="p-2 hover:bg-gray-100 cursor-pointer"
-                    onClick={() => handleStationSelect('from', station)}
+                    onClick={() => handleStationSelect(station, 'from')}
                   >
                     <div className="font-medium">{station.code}</div>
                     <div className="text-sm text-gray-600">{station.name}</div>
@@ -172,7 +211,7 @@ const TrainSearch = ({ onSearch, initialValues }) => {
               type="button"
               onClick={handleSwapStations}
               className="p-2 text-blue-600 hover:text-blue-700 focus:outline-none"
-              disabled={!searchParams.fromStation && !searchParams.toStation}
+              disabled={!fromStation && !toStation}
             >
               <FaExchangeAlt className="w-5 h-5" />
             </button>
@@ -185,8 +224,8 @@ const TrainSearch = ({ onSearch, initialValues }) => {
             </label>
             <input
               type="text"
-              value={searchParams.toStation}
-              onChange={handleToStationChange}
+              value={toStation}
+              onChange={(e) => handleStationInput(e.target.value, 'to')}
               onFocus={() => setShowToDropdown(true)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter station code or name"
@@ -197,7 +236,7 @@ const TrainSearch = ({ onSearch, initialValues }) => {
                   <div
                     key={index}
                     className="p-2 hover:bg-gray-100 cursor-pointer"
-                    onClick={() => handleStationSelect('to', station)}
+                    onClick={() => handleStationSelect(station, 'to')}
                   >
                     <div className="font-medium">{station.code}</div>
                     <div className="text-sm text-gray-600">{station.name}</div>
@@ -216,10 +255,10 @@ const TrainSearch = ({ onSearch, initialValues }) => {
           <div className="relative">
             <input
               type="date"
-              value={searchParams.date}
-              onChange={(e) => setSearchParams(prev => ({ ...prev, date: e.target.value }))}
-              min={minDate}
-              max={maxDateStr}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              min={getCurrentDate()}
+              max={getMaxDate()}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
             />
             <FaCalendarAlt className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -230,22 +269,12 @@ const TrainSearch = ({ onSearch, initialValues }) => {
         <button
           type="submit"
           className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={!searchParams.fromStation || !searchParams.toStation}
+          disabled={!fromStation || !toStation}
         >
           <FaSearch />
           <span>Search Trains</span>
         </button>
       </form>
-
-      {/* Click outside handler */}
-      <div 
-        className="fixed inset-0 z-0" 
-        style={{ display: (showFromDropdown || showToDropdown) ? 'block' : 'none' }}
-        onClick={() => {
-          setShowFromDropdown(false);
-          setShowToDropdown(false);
-        }}
-      />
     </div>
   );
 };
