@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
 
+// Move animations to a separate constant
+const animations = `
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`;
+
 const Services = () => {
   const [hoveredCard, setHoveredCard] = useState(null);
   
@@ -160,19 +174,8 @@ const Services = () => {
         </div>
       </div>
       
-      {/* Animation keyframes */}
-      <style jsx>{`
-        @keyframes fade-in-up {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
+      {/* Add animations without jsx attribute */}
+      <style>{animations}</style>
     </div>
   );
 };

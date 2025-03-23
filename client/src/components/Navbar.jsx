@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+// Move styles to a separate constant
+const styles = {
+  scrollbarHide: {
+    WebkitScrollbar: {
+      display: 'none'
+    },
+    msOverflowStyle: 'none',
+    scrollbarWidth: 'none'
+  }
+};
+
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -97,7 +108,7 @@ const Navbar = () => {
       {/* Navigation Menu */}
       <div className="bg-blue-800 text-white sticky top-0 z-50 shadow-md">
         <div className="container mx-auto px-4">
-          <div className="flex items-center space-x-1 md:space-x-6 overflow-x-auto py-3 scrollbar-hide">
+          <div className="flex items-center space-x-1 md:space-x-6 overflow-x-auto py-3" style={styles.scrollbarHide}>
             <Link to="/" className="whitespace-nowrap text-sm font-medium py-1 px-3 border-b-2 border-white hover:text-blue-200 transition-colors duration-300">HOME</Link>
             <Link to="/exclusive" className="whitespace-nowrap text-sm font-medium py-1 px-3 hover:text-blue-200 hover:border-b-2 hover:border-white transition-all duration-300">IRCTC EXCLUSIVE</Link>
             <Link to="/trains" className="whitespace-nowrap text-sm font-medium py-1 px-3 hover:text-blue-200 hover:border-b-2 hover:border-white transition-all duration-300">TRAINS</Link>
@@ -110,16 +121,18 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* Add style for scrollbar hiding in very small screens */}
-      <style jsx>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
+      {/* Add the styles to the head of the document */}
+      <style>
+        {`
+          .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+          }
+          .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+        `}
+      </style>
     </>
   );
 };

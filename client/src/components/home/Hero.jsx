@@ -1,5 +1,45 @@
 import React from 'react';
 
+// Move animations to a separate constant
+const animations = `
+  @keyframes slow-zoom {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.05); }
+  }
+  .animate-slow-zoom {
+    animation: slow-zoom 20s infinite alternate ease-in-out;
+  }
+  
+  @keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in-up {
+    animation: fade-in-up 0.8s ease-out forwards;
+  }
+  
+  @keyframes fade-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fade-in 1s ease-out forwards;
+  }
+  
+  @keyframes bounce-in {
+    0% { opacity: 0; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+  .animate-bounce-in {
+    animation: bounce-in 0.7s ease-out forwards;
+  }
+  
+  .delay-200 {
+    animation-delay: 0.2s;
+  }
+`;
+
 const Hero = () => {
   return (
     <div className="relative">

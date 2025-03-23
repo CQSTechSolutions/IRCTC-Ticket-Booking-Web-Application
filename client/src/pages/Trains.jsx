@@ -1,99 +1,227 @@
 import React, { useState, useEffect } from 'react';
-import trainData from '../data/trains.json';
-// import trainData from '../data/empty-trains.json'; // Uncomment to test empty state
+import axios from 'axios';
+import { useSearchParams } from 'react-router-dom';
+import TrainSearch from '../components/trains/TrainSearch';
 import TrainList from '../components/trains/TrainList';
-import NoTrainsFound from '../components/trains/NoTrainsFound';
-import { Link } from 'react-router-dom';
+import LoadingSpinner from '../components/common/LoadingSpinner';
+import { toast } from 'react-hot-toast';
+
+// Popular stations for quick selection
+const POPULAR_STATIONS = [
+  { code: 'NDLS', name: 'New Delhi' },
+  { code: 'HWH', name: 'Howrah' },
+  { code: 'MMCT', name: 'Mumbai Central' },
+  { code: 'MAS', name: 'Chennai Central' },
+  { code: 'SBC', name: 'Bangalore' },
+  { code: 'PRYJ', name: 'Prayagraj Junction' },
+  { code: 'BZA', name: 'Vijayawada Junction' }
+];
 
 const Trains = () => {
-    const [trains, setTrains] = useState([]);
-    const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [trains, setTrains] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-    useEffect(() => {
-        // Simulate API loading
-        const loadTrains = async () => {
-            try {
-                // Simulating network delay
-                await new Promise(resolve => setTimeout(resolve, 800));
-                setTrains(trainData);
-            } catch (error) {
-                console.error('Error loading train data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
+  // Get search params from URL
+  const fromStation = searchParams.get('fromStation') || '';
+  const toStation = searchParams.get('toStation') || '';
+  const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
 
-        loadTrains();
-    }, []);
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-screen">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-800"></div>
-            </div>
-        );
+  const fetchAllTrains = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await axios.get('http://localhost:3000/api/trains');
+      if (response.data && response.data.data) {
+        const transformedTrains = response.data.data.map(train => {
+          const firstStation = train.stations[0];
+          const lastStation = train.stations[train.stations.length - 1];
+          return transformTrainData(train, firstStation, lastStation);
+        });
+        setTrains(transformedTrains);
+      } else {
+        setTrains([]);
+        setError('No train data available');
+      }
+    } catch (error) {
+      console.error('Error fetching trains:', error);
+      setError('Failed to fetch trains. Please try again.');
+      toast.error(error.response?.data?.message || 'Failed to fetch trains');
+      setTrains([]);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="bg-blue-800 text-white py-6">
-                <div className="container mx-auto px-4">
-                    <h1 className="text-3xl font-bold">Train Search</h1>
-                    <div className="flex gap-2 mt-2">
-                        <Link to="/" className="text-blue-200 hover:text-white text-sm">Home</Link>
-                        <span className="text-blue-300">/</span>
-                        <span className="text-sm">Trains</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Search Form */}
-            <div className="container mx-auto px-4 py-6">
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                    <form className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">From Station</label>
-                            <input 
-                                type="text" 
-                                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Enter source station"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">To Station</label>
-                            <input 
-                                type="text" 
-                                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Enter destination station"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Date of Journey</label>
-                            <input 
-                                type="date" 
-                                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                        <div className="md:col-span-3 flex justify-center mt-2">
-                            <button 
-                                type="button"
-                                className="bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 px-6 rounded-lg transition duration-300"
-                            >
-                                Search Trains
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            {/* Train Results */}
-            {trains.length > 0 ? (
-                <TrainList trains={trains} />
-            ) : (
-                <NoTrainsFound />
-            )}
-        </div>
+  const transformTrainData = (train, fromStn, toStn) => {
+    // Find the indices of the stations in the route
+    const fromIndex = train.stations.findIndex(s => s.code === fromStn.code);
+    const toIndex = train.stations.findIndex(s => s.code === toStn.code);
+    
+    // Calculate distance between stations
+    const distance = toStn.distance - fromStn.distance;
+    
+    // Calculate duration between stations
+    const duration = calculateJourneyTime(
+      fromStn.departureTime || fromStn.arrivalTime,
+      toStn.arrivalTime || toStn.departureTime,
+      fromStn.day,
+      toStn.day
     );
+
+    // Calculate fares for all classes
+    const fares = {};
+    train.classes.forEach(cls => {
+      fares[cls] = Math.ceil(distance * train.farePerKm[cls]);
+    });
+
+    return {
+      ...train,
+      journey: {
+        fromStation: fromStn,
+        toStation: toStn,
+        distance,
+        duration,
+        intermediateStations: train.stations.slice(fromIndex + 1, toIndex),
+        fares
+      }
+    };
+  };
+
+  const searchTrains = async (params) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Update URL with search params
+      setSearchParams(params);
+
+      if (!params.fromStation || !params.toStation) {
+        await fetchAllTrains();
+        return;
+      }
+
+      const response = await axios.get('http://localhost:3000/api/trains/search', {
+        params: {
+          fromStation: params.fromStation,
+          toStation: params.toStation,
+          date: params.date
+        }
+      });
+
+      if (response.data && response.data.data) {
+        const transformedTrains = response.data.data.map(train => {
+          // Find the specified stations in the train's route
+          const fromStn = train.stations.find(s => s.code === params.fromStation);
+          const toStn = train.stations.find(s => s.code === params.toStation);
+          
+          if (!fromStn || !toStn) return null;
+          
+          return transformTrainData(train, fromStn, toStn);
+        }).filter(Boolean); // Remove null entries
+
+        setTrains(transformedTrains);
+        
+        if (transformedTrains.length === 0) {
+          toast.error('No trains found for this route');
+        }
+      } else {
+        setTrains([]);
+        setError('No trains available for this route');
+      }
+    } catch (error) {
+      console.error('Error searching trains:', error);
+      const errorMessage = error.response?.data?.message || 
+                          'Failed to search trains. Please try again later.';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      setTrains([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper function to calculate journey time
+  const calculateJourneyTime = (departure, arrival, departureDay, arrivalDay) => {
+    try {
+      const dept = new Date(`2024-01-${departureDay}T${departure}`);
+      const arr = new Date(`2024-01-${arrivalDay}T${arrival}`);
+      const diff = arr - dept;
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      return { hours, minutes };
+    } catch (error) {
+      console.error('Error calculating journey time:', error);
+      return { hours: 0, minutes: 0 };
+    }
+  };
+
+  // Initial data fetch based on URL params
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        if (fromStation && toStation) {
+          await searchTrains({ fromStation, toStation, date });
+        } else {
+          await fetchAllTrains();
+        }
+      } catch (error) {
+        console.error('Error initializing data:', error);
+        setError('Failed to initialize data');
+        setTrains([]);
+      }
+    };
+
+    initializeData();
+  }, []); // Empty dependency array for initial load only
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="container mx-auto px-4">
+        <TrainSearch
+          onSearch={searchTrains}
+          popularStations={POPULAR_STATIONS}
+          initialValues={{ fromStation, toStation, date }}
+        />
+
+        {loading ? (
+          <LoadingSpinner size="large" className="py-20" />
+        ) : error ? (
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg text-center">
+            {error}
+          </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold text-gray-800">
+                {fromStation && toStation ? (
+                  `Trains from ${fromStation} to ${toStation}`
+                ) : (
+                  'All Available Trains'
+                )}
+              </h3>
+              <p className="text-gray-600">
+                {trains?.length || 0} trains found
+                {fromStation && toStation && ` • ${new Date(date).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}`}
+              </p>
+            </div>
+            
+            <TrainList
+              trains={trains || []}
+              fromStation={fromStation}
+              toStation={toStation}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default Trains;
