@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/'); // Redirect to home page after logout
+  };
 
   return (
     <>
@@ -36,8 +42,19 @@ const Navbar = () => {
           
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
-            <Link to="/login" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Login</Link>
-            <Link to="/register" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Register</Link>
+            {localStorage.getItem('token') ? (
+                <button 
+                    onClick={handleLogout} 
+                    className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded"
+                >
+                    Logout
+                </button>
+            ) : (
+                <>
+                    <Link to="/login" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Login</Link>
+                    <Link to="/register" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Register</Link>
+                </>
+            )}
             <Link to="/contact" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Contact Us</Link>
             <Link to="/disha" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Ask Disha</Link>
             <div className="relative group">
