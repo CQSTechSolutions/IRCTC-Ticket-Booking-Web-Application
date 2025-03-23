@@ -123,13 +123,59 @@ export const searchTrains = async (req, res) => {
             });
         }
 
-        const trains = await Train.findTrainsBetweenStations(fromStation, toStation);
-        
-        // Filter trains by date if provided
-        let filteredTrains = trains;
+        // Find trains between stations
+        const trains = await Train.find({
+            'stations.stationCode': { 
+                $all: [fromStation, toStation] 
+            },
+            status: 'Active'
+        });
+
+        // Filter trains to ensure correct station sequence and get journey details
+        const validTrains = trains.map(train => {
+            const stations = train.stations;
+            const fromIndex = stations.findIndex(s => s.stationCode === fromStation);
+            const toIndex = stations.findIndex(s => s.stationCode === toStation);
+
+            // Skip if stations are not in correct sequence
+            if (fromIndex === -1 || toIndex === -1 || fromIndex >= toIndex) {
+                return null;
+            }
+
+            // Calculate journey details
+            const fromStation = stations[fromIndex];
+            const toStation = stations[toIndex];
+            const distance = toStation.distance - fromStation.distance;
+            const journeyTime = calculateJourneyTime(fromStation.departureTime, toStation.arrivalTime, fromStation.day, toStation.day);
+
+            // Calculate fares for all available classes
+            const fares = {};
+            train.classes.forEach(cls => {
+                fares[cls] = Math.ceil(distance * train.farePerKm[cls]);
+            });
+
+            // Get intermediate stations
+            const intermediateStations = stations.slice(fromIndex + 1, toIndex);
+
+            return {
+                ...train.toObject(),
+                journey: {
+                    fromStation: stations[fromIndex],
+                    toStation: stations[toIndex],
+                    distance,
+                    duration: journeyTime,
+                    intermediateStations,
+                    fares
+                }
+            };
+        }).filter(Boolean); // Remove null entries
+
+        // Filter by date if provided
+        let filteredTrains = validTrains;
         if (date) {
-            const dayOfWeek = new Date(date).toLocaleLowerCase();
-            filteredTrains = trains.filter(train => train.runsOnDays[dayOfWeek]);
+            const journeyDate = new Date(date);
+            const dayOfWeek = journeyDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+            filteredTrains = validTrains.filter(train => train.runsOnDays[dayOfWeek]);
         }
 
         res.status(200).json({
@@ -138,12 +184,23 @@ export const searchTrains = async (req, res) => {
             data: filteredTrains
         });
     } catch (error) {
+        console.error('Search trains error:', error);
         res.status(500).json({
             success: false,
             message: "Failed to search trains",
             error: error.message
         });
     }
+};
+
+// Helper function to calculate journey time
+const calculateJourneyTime = (departure, arrival, departureDay, arrivalDay) => {
+    const dept = new Date(`2024-01-${departureDay}T${departure}`);
+    const arr = new Date(`2024-01-${arrivalDay}T${arrival}`);
+    const diff = arr - dept;
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return { hours, minutes };
 };
 
 // Get intermediate stations
