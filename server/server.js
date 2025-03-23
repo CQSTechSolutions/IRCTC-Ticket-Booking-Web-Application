@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 // other imports 
 import dbConn from "./src/utils/db.js";
 import authRoute from "./src/routes/authRoute.js"
+import trainRoute from "./src/routes/trainRoute.js"
 
 dotenv.config({ path: './.env.local' });
 const app = express();
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 app.use('/api/auth', authRoute);
+app.use('/api/trains', trainRoute);
 
 dbConn();
 
