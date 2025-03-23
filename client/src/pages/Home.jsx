@@ -1,29 +1,31 @@
 import React from "react";
-import Navbar from "../components/home/Navbar";
 import Hero from "../components/home/Hero";
 import SearchForm from "../components/home/SearchForm";
 import Services from "../components/home/Services";
 import NewsOffers from "../components/home/NewsOffers";
-import Footer from "../components/home/Footer";
+import Footer from "../components/Footer";
+import HomeTrainSection from "../components/home/HomeTrainSection";
 
 const Home = () => {
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Navbar */}
-            <Navbar />
-            
             {/* Hero Section with Background */}
             <div className="relative">
                 <Hero />
                 
                 {/* Search Form - Positioned over the Hero */}
-                <div className="relative -mt-24 px-4 sm:px-6 lg:px-8 z-20 max-w-5xl mx-auto">
+                <div className="relative mt-24 px-4 sm:px-6 lg:px-8 z-20 max-w-5xl mx-auto">
                     <SearchForm />
                 </div>
             </div>
             
+            {/* Featured Trains Section */}
+            <div className="mt-20">
+                <HomeTrainSection />
+            </div>
+            
             {/* Services Section */}
-            <div className="mt-32">
+            <div className="mt-12">
                 <Services />
             </div>
             

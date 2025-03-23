@@ -8,6 +8,36 @@ const SearchForm = () => {
   const [journeyClass, setJourneyClass] = useState("");
   const [quota, setQuota] = useState("GENERAL");
   const [swapAnimation, setSwapAnimation] = useState(false);
+  const [showFromDropdown, setShowFromDropdown] = useState(false);
+  const [showToDropdown, setShowToDropdown] = useState(false);
+  const [searchFromTerm, setSearchFromTerm] = useState("");
+  const [searchToTerm, setSearchToTerm] = useState("");
+
+  // Sample stations data - in a real app, this would come from an API
+  const stations = [
+    { code: "NDLS", name: "New Delhi" },
+    { code: "MAS", name: "Chennai Central" },
+    { code: "HWH", name: "Howrah Junction" },
+    { code: "BCT", name: "Mumbai Central" },
+    { code: "SBC", name: "Bengaluru City Junction" },
+    { code: "CSTM", name: "Chhatrapati Shivaji Terminus" },
+    { code: "LKO", name: "Lucknow" },
+    { code: "JAT", name: "Jammu Tawi" },
+    { code: "ADI", name: "Ahmedabad Junction" },
+    { code: "BPL", name: "Bhopal Junction" },
+    { code: "CNB", name: "Kanpur Central" },
+    { code: "PNBE", name: "Patna Junction" },
+  ];
+
+  const filteredFromStations = stations.filter(station => 
+    station.name.toLowerCase().includes(searchFromTerm.toLowerCase()) || 
+    station.code.toLowerCase().includes(searchFromTerm.toLowerCase())
+  );
+
+  const filteredToStations = stations.filter(station => 
+    station.name.toLowerCase().includes(searchToTerm.toLowerCase()) || 
+    station.code.toLowerCase().includes(searchToTerm.toLowerCase())
+  );
 
   const swapStations = () => {
     setSwapAnimation(true);
@@ -15,8 +45,22 @@ const SearchForm = () => {
       const temp = fromStation;
       setFromStation(toStation);
       setToStation(temp);
+      setSearchFromTerm(searchToTerm);
+      setSearchToTerm(searchFromTerm);
       setSwapAnimation(false);
     }, 300);
+  };
+
+  const handleFromStationSelect = (station) => {
+    setFromStation(`${station.code} - ${station.name}`);
+    setSearchFromTerm(`${station.code} - ${station.name}`);
+    setShowFromDropdown(false);
+  };
+
+  const handleToStationSelect = (station) => {
+    setToStation(`${station.code} - ${station.name}`);
+    setSearchToTerm(`${station.code} - ${station.name}`);
+    setShowToDropdown(false);
   };
 
   return (
@@ -82,11 +126,43 @@ const SearchForm = () => {
                 </div>
                 <input 
                   type="text" 
-                  value={fromStation}
-                  onChange={(e) => setFromStation(e.target.value)}
-                  placeholder="Enter Origin Station" 
+                  value={searchFromTerm}
+                  onChange={(e) => {
+                    setSearchFromTerm(e.target.value);
+                    setShowFromDropdown(true);
+                  }}
+                  onFocus={() => setShowFromDropdown(true)}
+                  placeholder="Search Origin Station" 
                   className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
                 />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                {showFromDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white shadow-lg rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
+                    {filteredFromStations.length > 0 ? (
+                      filteredFromStations.map((station, index) => (
+                        <div 
+                          key={index} 
+                          className="p-3 hover:bg-blue-50 cursor-pointer flex items-center border-b border-gray-100"
+                          onClick={() => handleFromStationSelect(station)}
+                        >
+                          <div className="flex-shrink-0 bg-blue-100 rounded-full p-2 mr-3">
+                            <span className="text-blue-800 font-bold">{station.code}</span>
+                          </div>
+                          <div>
+                            <p className="font-medium">{station.name}</p>
+                            <p className="text-xs text-gray-500">{station.code}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 text-center text-gray-500">No stations found</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -111,11 +187,43 @@ const SearchForm = () => {
                 </div>
                 <input 
                   type="text" 
-                  value={toStation}
-                  onChange={(e) => setToStation(e.target.value)}
-                  placeholder="Enter Destination Station" 
+                  value={searchToTerm}
+                  onChange={(e) => {
+                    setSearchToTerm(e.target.value);
+                    setShowToDropdown(true);
+                  }}
+                  onFocus={() => setShowToDropdown(true)}
+                  placeholder="Search Destination Station" 
                   className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
                 />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                {showToDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white shadow-lg rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
+                    {filteredToStations.length > 0 ? (
+                      filteredToStations.map((station, index) => (
+                        <div 
+                          key={index} 
+                          className="p-3 hover:bg-blue-50 cursor-pointer flex items-center border-b border-gray-100"
+                          onClick={() => handleToStationSelect(station)}
+                        >
+                          <div className="flex-shrink-0 bg-blue-100 rounded-full p-2 mr-3">
+                            <span className="text-blue-800 font-bold">{station.code}</span>
+                          </div>
+                          <div>
+                            <p className="font-medium">{station.name}</p>
+                            <p className="text-xs text-gray-500">{station.code}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 text-center text-gray-500">No stations found</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
