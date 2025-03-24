@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import dbConn from "./src/utils/db.js";
 import authRoute from "./src/routes/authRoute.js"
 import trainRoute from "./src/routes/trainRoute.js"
+import bookingRoute from "./src/routes/bookingRoute.js"
 
 dotenv.config({ path: './.env.local' });
 const app = express();
@@ -28,6 +29,7 @@ app.use(express.urlencoded({ extended: false }));
 
 app.use('/api/auth', authRoute);
 app.use('/api/trains', trainRoute);
+app.use('/api/bookings', bookingRoute);
 
 dbConn();
 

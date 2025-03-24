@@ -395,7 +395,7 @@ const SearchForm = () => {
       )}
 
       {/* CSS Animations */}
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes fade-out {
           0% { opacity: 1; }
           100% { opacity: 0; }
@@ -411,7 +411,7 @@ const SearchForm = () => {
         .animate-fade-in {
           animation: fade-in 0.3s ease-out forwards;
         }
-      `}</style>
+      ` }} />
     </div>
   );
 };

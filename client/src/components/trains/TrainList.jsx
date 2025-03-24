@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FaTrain, FaClock, FaRupeeSign, FaMapMarkerAlt, FaRoute, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { FaTrain, FaClock, FaRupeeSign, FaMapMarkerAlt, FaRoute, FaChevronDown, FaChevronUp, FaInfoCircle, FaTicketAlt } from 'react-icons/fa';
 import { MdAirlineSeatReclineNormal } from 'react-icons/md';
 
 const TrainList = ({ trains, fromStation, toStation }) => {
   const [expandedTrain, setExpandedTrain] = useState(null);
+
+  // Get current date in YYYY-MM-DD format as fallback
+  const getCurrentDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const formatTime = (time) => {
     if (!time) return 'N/A';
@@ -70,6 +79,12 @@ const TrainList = ({ trains, fromStation, toStation }) => {
 
   const toggleTrainDetails = (trainId) => {
     setExpandedTrain(expandedTrain === trainId ? null : trainId);
+  };
+
+  // Get the journey date from the URL or use current date
+  const getJourneyDate = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('date') || getCurrentDate();
   };
 
   if (!trains || trains.length === 0) {
@@ -232,6 +247,22 @@ const TrainList = ({ trains, fromStation, toStation }) => {
                   </div>
                 </div>
               )}
+
+              {/* Booking Buttons */}
+              <div className="mt-4 flex space-x-2">
+                <Link
+                  to={`/trains/${train._id}/${train.journey.fromStation.stationCode}/${train.journey.toStation.stationCode}/${getJourneyDate()}`}
+                  className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors duration-300 text-sm flex items-center"
+                >
+                  <FaInfoCircle className="mr-1" /> View Details
+                </Link>
+                <Link
+                  to={`/trains/${train._id}/${train.journey.fromStation.stationCode}/${train.journey.toStation.stationCode}/${getJourneyDate()}?book=true`}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-300 text-sm flex items-center"
+                >
+                  <FaTicketAlt className="mr-1" /> Book Now
+                </Link>
+              </div>
             </div>
           )}
         </div>

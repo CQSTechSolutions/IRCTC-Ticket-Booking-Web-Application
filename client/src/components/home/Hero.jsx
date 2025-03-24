@@ -128,7 +128,7 @@ const Hero = () => {
       </div>
 
       {/* CSS Animations */}
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes slow-zoom {
           0% { transform: scale(1); }
           100% { transform: scale(1.05); }
@@ -165,7 +165,7 @@ const Hero = () => {
         .delay-200 {
           animation-delay: 0.2s;
         }
-      `}</style>
+      ` }} />
     </div>
   );
 };
