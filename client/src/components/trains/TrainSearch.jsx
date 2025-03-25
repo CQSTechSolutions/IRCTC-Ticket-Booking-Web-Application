@@ -3,10 +3,22 @@ import { FaSearch, FaExchangeAlt, FaCalendarAlt, FaTimes } from 'react-icons/fa'
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
+// Class types with descriptions
+const CLASS_TYPES = [
+  { code: "1A", name: "AC First Class (1A)", description: "Most premium class with lockable, carpeted cabins" },
+  { code: "2A", name: "AC 2 Tier (2A)", description: "Air-conditioned coaches with 2-tier berths" },
+  { code: "3A", name: "AC 3 Tier (3A)", description: "Air-conditioned coaches with 3-tier berths" },
+  { code: "SL", name: "Sleeper (SL)", description: "Non-AC coaches with 3-tier berths" },
+  { code: "CC", name: "Chair Car (CC)", description: "Air-conditioned seating coaches" },
+  { code: "2S", name: "Second Sitting (2S)", description: "Non-AC seating coaches" },
+  { code: "GN", name: "General (GN)", description: "Unreserved general coaches" }
+];
+
 const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => {
   const [fromStation, setFromStation] = useState(initialValues.fromStation || '');
   const [toStation, setToStation] = useState(initialValues.toStation || '');
   const [date, setDate] = useState(initialValues.date || getCurrentDate());
+  const [classType, setClassType] = useState(initialValues.classType || '');
   const [stations, setStations] = useState([]);
   const [filteredFromStations, setFilteredFromStations] = useState([]);
   const [filteredToStations, setFilteredToStations] = useState([]);
@@ -151,7 +163,12 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
       return;
     }
 
-    onSearch({ fromStation, toStation, date });
+    onSearch({ 
+      fromStation, 
+      toStation, 
+      date,
+      classType
+    });
   };
 
   return (
@@ -164,6 +181,7 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
               setFromStation('');
               setToStation('');
               setDate(getCurrentDate());
+              setClassType('');
               onSearch({ fromStation: '', toStation: '', date: getCurrentDate() });
             }}
             className="text-gray-500 hover:text-gray-700 flex items-center gap-1"
@@ -247,21 +265,45 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
           </div>
         </div>
 
-        {/* Date Selection */}
-        <div className="relative">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Journey Date
-          </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Date Selection */}
           <div className="relative">
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              min={getCurrentDate()}
-              max={getMaxDate()}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
-            />
-            <FaCalendarAlt className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Journey Date
+            </label>
+            <div className="relative">
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                min={getCurrentDate()}
+                max={getMaxDate()}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
+              />
+              <FaCalendarAlt className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            </div>
+          </div>
+
+          {/* Class Type Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Travel Class
+            </label>
+            <select
+              value={classType}
+              onChange={(e) => setClassType(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Classes</option>
+              {CLASS_TYPES.map(cls => (
+                <option key={cls.code} value={cls.code}>{cls.name}</option>
+              ))}
+            </select>
+            {classType && (
+              <p className="text-sm text-gray-600 mt-1">
+                {CLASS_TYPES.find(c => c.code === classType)?.description}
+              </p>
+            )}
           </div>
         </div>
 

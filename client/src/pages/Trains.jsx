@@ -118,7 +118,7 @@ const Trains = () => {
       setSearchParams({ 
         fromStation: params.fromStation, 
         toStation: params.toStation, 
-        date: searchDate 
+        date: searchDate
       });
 
       const response = await axios.get(`${API_BASE_URL}/trains/search`, {
@@ -219,7 +219,7 @@ const Trains = () => {
           initialValues={{ 
             fromStation, 
             toStation, 
-            date: date || getCurrentDate() 
+            date: date || getCurrentDate()
           }}
         />
 
@@ -240,7 +240,7 @@ const Trains = () => {
                 )}
               </h3>
               <p className="text-gray-600">
-                {trains?.length || 0} trains found
+                {trains.length} trains found
                 {fromStation && toStation && ` • ${new Date(date).toLocaleDateString('en-US', {
                   weekday: 'long',
                   year: 'numeric',

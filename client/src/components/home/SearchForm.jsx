@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const SearchForm = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("trains");
   const [fromStation, setFromStation] = useState("");
   const [toStation, setToStation] = useState("");
-  const [departDate, setDepartDate] = useState("");
+  const [departDate, setDepartDate] = useState(getCurrentDate());
   const [journeyClass, setJourneyClass] = useState("");
   const [quota, setQuota] = useState("GENERAL");
   const [swapAnimation, setSwapAnimation] = useState(false);
@@ -12,6 +14,30 @@ const SearchForm = () => {
   const [showToDropdown, setShowToDropdown] = useState(false);
   const [searchFromTerm, setSearchFromTerm] = useState("");
   const [searchToTerm, setSearchToTerm] = useState("");
+  const [validation, setValidation] = useState({
+    fromStation: true,
+    toStation: true,
+    departDate: true
+  });
+
+  // Get current date in YYYY-MM-DD format
+  function getCurrentDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Get one year from now as max date
+  function getMaxDate() {
+    const today = new Date();
+    today.setFullYear(today.getFullYear() + 1);
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 
   // Sample stations data - in a real app, this would come from an API
   const stations = [
@@ -29,6 +55,17 @@ const SearchForm = () => {
     { code: "PNBE", name: "Patna Junction" },
   ];
 
+  // Class types with descriptions
+  const classTypes = [
+    { code: "1A", name: "AC First Class (1A)", description: "Most premium class with lockable, carpeted cabins" },
+    { code: "2A", name: "AC 2 Tier (2A)", description: "Air-conditioned coaches with 2-tier berths" },
+    { code: "3A", name: "AC 3 Tier (3A)", description: "Air-conditioned coaches with 3-tier berths" },
+    { code: "SL", name: "Sleeper (SL)", description: "Non-AC coaches with 3-tier berths" },
+    { code: "CC", name: "Chair Car (CC)", description: "Air-conditioned seating coaches" },
+    { code: "2S", name: "Second Sitting (2S)", description: "Non-AC seating coaches" },
+    { code: "GN", name: "General (GN)", description: "Unreserved general coaches" }
+  ];
+
   const filteredFromStations = stations.filter(station => 
     station.name.toLowerCase().includes(searchFromTerm.toLowerCase()) || 
     station.code.toLowerCase().includes(searchFromTerm.toLowerCase())
@@ -38,6 +75,19 @@ const SearchForm = () => {
     station.name.toLowerCase().includes(searchToTerm.toLowerCase()) || 
     station.code.toLowerCase().includes(searchToTerm.toLowerCase())
   );
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (!event.target.closest('.station-dropdown')) {
+        setShowFromDropdown(false);
+        setShowToDropdown(false);
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const swapStations = () => {
     setSwapAnimation(true);
@@ -52,15 +102,43 @@ const SearchForm = () => {
   };
 
   const handleFromStationSelect = (station) => {
-    setFromStation(`${station.code} - ${station.name}`);
+    setFromStation(station.code);
     setSearchFromTerm(`${station.code} - ${station.name}`);
     setShowFromDropdown(false);
+    setValidation({...validation, fromStation: true});
   };
 
   const handleToStationSelect = (station) => {
-    setToStation(`${station.code} - ${station.name}`);
+    setToStation(station.code);
     setSearchToTerm(`${station.code} - ${station.name}`);
     setShowToDropdown(false);
+    setValidation({...validation, toStation: true});
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    
+    // Validate inputs
+    const newValidation = {
+      fromStation: !!fromStation,
+      toStation: !!toStation,
+      departDate: !!departDate
+    };
+    
+    setValidation(newValidation);
+    
+    if (newValidation.fromStation && newValidation.toStation && newValidation.departDate) {
+      // Navigate to trains page with search params
+      navigate(`/trains?fromStation=${fromStation}&toStation=${toStation}&date=${departDate}${journeyClass ? `&class=${journeyClass}` : ''}`);
+    }
+  };
+
+  const handlePNRSubmit = (e) => {
+    e.preventDefault();
+    const pnrInput = document.getElementById('pnr-input').value;
+    if (pnrInput && pnrInput.length === 10) {
+      navigate(`/booking/confirmation/${pnrInput}`);
+    }
   };
 
   return (
@@ -113,9 +191,9 @@ const SearchForm = () => {
 
       {/* Train Search Form */}
       {activeTab === "trains" && (
-        <div className="p-8">
+        <form onSubmit={handleSearchSubmit} className="p-8">
           <div className="grid md:grid-cols-2 gap-8 relative">
-            <div className={`relative ${swapAnimation ? 'animate-fade-out' : 'animate-fade-in'}`}>
+            <div className={`relative station-dropdown ${swapAnimation ? 'animate-fade-out' : 'animate-fade-in'}`}>
               <label className="block text-sm font-medium text-gray-700 mb-2">From</label>
               <div className="relative">
                 <div className="absolute left-0 top-0 h-full flex items-center pl-4 pointer-events-none">
@@ -133,8 +211,12 @@ const SearchForm = () => {
                   }}
                   onFocus={() => setShowFromDropdown(true)}
                   placeholder="Search Origin Station" 
-                  className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
+                  className={`w-full p-4 pl-12 border ${!validation.fromStation ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300`}
+                  required
                 />
+                {!validation.fromStation && (
+                  <p className="text-red-500 text-sm mt-1">Please select a departure station</p>
+                )}
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -168,6 +250,7 @@ const SearchForm = () => {
             
             {/* Swap Button */}
             <button 
+              type="button"
               onClick={swapStations}
               className="absolute left-1/2 top-10 transform -translate-x-1/2 z-10 bg-white rounded-full w-10 h-10 shadow-md flex items-center justify-center border border-gray-200 hover:shadow-lg transition-all duration-300 hover:border-blue-500 hover:bg-blue-50 group"
             >
@@ -176,7 +259,7 @@ const SearchForm = () => {
               </svg>
             </button>
             
-            <div className={`relative ${swapAnimation ? 'animate-fade-out' : 'animate-fade-in'}`}>
+            <div className={`relative station-dropdown ${swapAnimation ? 'animate-fade-out' : 'animate-fade-in'}`}>
               <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
               <div className="relative">
                 <div className="absolute left-0 top-0 h-full flex items-center pl-4 pointer-events-none">
@@ -194,8 +277,12 @@ const SearchForm = () => {
                   }}
                   onFocus={() => setShowToDropdown(true)}
                   placeholder="Search Destination Station" 
-                  className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
+                  className={`w-full p-4 pl-12 border ${!validation.toStation ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300`}
+                  required
                 />
+                {!validation.toStation && (
+                  <p className="text-red-500 text-sm mt-1">Please select a destination station</p>
+                )}
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -240,14 +327,23 @@ const SearchForm = () => {
                 <input 
                   type="date" 
                   value={departDate}
-                  onChange={(e) => setDepartDate(e.target.value)}
-                  className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
+                  onChange={(e) => {
+                    setDepartDate(e.target.value);
+                    setValidation({...validation, departDate: true});
+                  }}
+                  min={getCurrentDate()}
+                  max={getMaxDate()}
+                  className={`w-full p-4 pl-12 border ${!validation.departDate ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300`}
+                  required
                 />
+                {!validation.departDate && (
+                  <p className="text-red-500 text-sm mt-1">Please select a valid date</p>
+                )}
               </div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">All Classes</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Class</label>
               <div className="relative">
                 <div className="absolute left-0 top-0 h-full flex items-center pl-4 pointer-events-none">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -260,11 +356,9 @@ const SearchForm = () => {
                   className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm appearance-none bg-none transition duration-300"
                 >
                   <option value="">All Classes</option>
-                  <option value="1A">AC First Class (1A)</option>
-                  <option value="2A">AC 2 Tier (2A)</option>
-                  <option value="3A">AC 3 Tier (3A)</option>
-                  <option value="SL">Sleeper (SL)</option>
-                  <option value="2S">Second Sitting (2S)</option>
+                  {classTypes.map(cls => (
+                    <option key={cls.code} value={cls.code}>{cls.name}</option>
+                  ))}
                 </select>
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -272,6 +366,11 @@ const SearchForm = () => {
                   </svg>
                 </div>
               </div>
+              {journeyClass && (
+                <p className="text-sm text-gray-600 mt-1">
+                  {classTypes.find(c => c.code === journeyClass)?.description}
+                </p>
+              )}
             </div>
             
             <div>
@@ -318,16 +417,19 @@ const SearchForm = () => {
           </div>
 
           <div className="mt-8 flex justify-center">
-            <button className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-12 rounded-lg shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-orange-500/50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50">
+            <button 
+              type="submit"
+              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-12 rounded-lg shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-orange-500/50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50"
+            >
               Search Trains
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* PNR Status Tab */}
       {activeTab === "pnr" && (
-        <div className="p-8">
+        <form onSubmit={handlePNRSubmit} className="p-8">
           <div className="max-w-md mx-auto">
             <label className="block text-sm font-medium text-gray-700 mb-2">PNR Number</label>
             <div className="relative">
@@ -338,22 +440,28 @@ const SearchForm = () => {
               </div>
               <input 
                 type="text" 
+                id="pnr-input"
                 placeholder="Enter 10 digit PNR number" 
+                pattern="[0-9]{10}"
                 className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
+                required
               />
             </div>
             <div className="mt-8 flex justify-center">
-              <button className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-12 rounded-lg shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-orange-500/50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50">
+              <button 
+                type="submit"
+                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-12 rounded-lg shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-orange-500/50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50"
+              >
                 Get PNR Status
               </button>
             </div>
           </div>
-        </div>
+        </form>
       )}
 
       {/* Charts/Vacancy Tab */}
       {activeTab === "charts" && (
-        <div className="p-8">
+        <form className="p-8">
           <div className="grid md:grid-cols-2 gap-8">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Train Number</label>
@@ -367,6 +475,7 @@ const SearchForm = () => {
                   type="text" 
                   placeholder="Enter Train Number" 
                   className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
+                  required
                 />
               </div>
             </div>
@@ -381,17 +490,39 @@ const SearchForm = () => {
                 </div>
                 <input 
                   type="date" 
+                  min={getCurrentDate()}
+                  max={getMaxDate()}
                   className="w-full p-4 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition duration-300" 
+                  required
                 />
               </div>
             </div>
           </div>
+          
+          <div className="mt-8">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Coach Class</label>
+            <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
+              {classTypes.map(cls => (
+                <label key={cls.code} className="relative px-3 py-2 cursor-pointer">
+                  <input type="radio" name="classType" value={cls.code} className="peer sr-only" />
+                  <div className="peer-checked:bg-blue-500 peer-checked:text-white bg-gray-100 text-gray-800 text-center rounded-lg p-2 transition-colors duration-200 hover:bg-gray-200">
+                    <div className="font-semibold">{cls.code}</div>
+                    <div className="text-xs">{cls.name.split(' ')[0]}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          
           <div className="mt-8 flex justify-center">
-            <button className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-12 rounded-lg shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-orange-500/50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50">
+            <button 
+              type="submit"
+              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-12 rounded-lg shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-orange-500/50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50"
+            >
               Get Vacancy
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* CSS Animations */}

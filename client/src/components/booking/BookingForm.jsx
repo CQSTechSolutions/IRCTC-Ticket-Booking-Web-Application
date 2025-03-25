@@ -2,37 +2,43 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { FaPlus, FaMinus, FaTicketAlt, FaMoneyBillWave } from 'react-icons/fa';
+import { FaPlus, FaMinus, FaTicketAlt, FaMoneyBillWave, FaCouch, FaInfoCircle, FaSnowflake } from 'react-icons/fa';
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
-const BookingForm = ({ train, fromStation, toStation, journeyDate, classType }) => {
+// Class types with descriptions and capacities
+const CLASS_TYPES = [
+  { code: "1A", name: "AC First Class (1A)", description: "Most premium class with lockable, carpeted cabins", capacity: 18 },
+  { code: "2A", name: "AC 2 Tier (2A)", description: "Air-conditioned coaches with 2-tier berths", capacity: 52 },
+  { code: "3A", name: "AC 3 Tier (3A)", description: "Air-conditioned coaches with 3-tier berths", capacity: 64 },
+  { code: "SL", name: "Sleeper (SL)", description: "Non-AC coaches with 3-tier berths", capacity: 72 },
+  { code: "CC", name: "Chair Car (CC)", description: "Air-conditioned seating coaches", capacity: 78 },
+  { code: "2S", name: "Second Sitting (2S)", description: "Non-AC seating coaches", capacity: 108 },
+  { code: "GN", name: "General (GN)", description: "Unreserved general coaches", capacity: 150 }
+];
+
+const BookingForm = ({ train, selectedClass, fromStation, toStation, journeyDate, fare: baseFare, onSubmit }) => {
   const navigate = useNavigate();
   const [passengers, setPassengers] = useState([
     { name: '', age: '', gender: 'Male', berth: 'Any' }
   ]);
-  const [fare, setFare] = useState(0);
-  const [totalFare, setTotalFare] = useState(0);
+  const [totalFare, setTotalFare] = useState(baseFare);
   const [isLoading, setIsLoading] = useState(false);
+  const [availableSeats, setAvailableSeats] = useState(0);
 
-  // Get user ID from local storage - in a real app, this would come from auth context
-  const userId = localStorage.getItem('userId') || '65f12a3e5c98765432101234'; // Sample valid ObjectId format
-  
   useEffect(() => {
-    if (train && fromStation && toStation && classType) {
-      calculateFare();
+    if (train && selectedClass) {
+      setAvailableSeats(train.availableSeats?.[selectedClass] || 0);
+      setTotalFare(baseFare * passengers.length);
     }
-  }, [train, fromStation, toStation, classType, passengers.length]);
-
-  const calculateFare = () => {
-    if (!train?.journey?.fares || !classType) return;
-
-    const baseFare = train.journey.fares[classType] || 0;
-    setFare(baseFare);
-    setTotalFare(baseFare * passengers.length);
-  };
+  }, [train, selectedClass, baseFare, passengers.length]);
 
   const handleAddPassenger = () => {
+    if (passengers.length >= availableSeats) {
+      toast.error(`Only ${availableSeats} seats available in ${selectedClass} class`);
+      return;
+    }
+    
     if (passengers.length < 6) {
       setPassengers([...passengers, { name: '', age: '', gender: 'Male', berth: 'Any' }]);
     } else {
@@ -57,25 +63,60 @@ const BookingForm = ({ train, fromStation, toStation, journeyDate, classType }) 
   };
 
   const validateForm = () => {
-    for (const passenger of passengers) {
-      if (!passenger.name || !passenger.age) {
-        toast.error('Please fill all required passenger details');
-        return false;
-      }
-      
-      const age = parseInt(passenger.age);
-      if (isNaN(age) || age < 1 || age > 120) {
-        toast.error('Age must be between 1 and 120');
-        return false;
-      }
-    }
+    let isValid = true;
+    let validationError = '';
 
-    if (!train || !fromStation || !toStation || !journeyDate || !classType) {
-      toast.error('Missing journey details');
+    // Check if user is logged in
+    const userString = localStorage.getItem('user');
+    if (!userString) {
+      validationError = 'Please login to book tickets';
+      navigate('/login', { state: { from: window.location.pathname } });
       return false;
     }
 
-    return true;
+    // Check if class is selected
+    if (!selectedClass) {
+      toast.error('Please select a travel class');
+      return false;
+    }
+
+    // Check available seats
+    if (passengers.length > availableSeats) {
+      toast.error(`Only ${availableSeats} seats available in ${selectedClass} class`);
+      return false;
+    }
+
+    // Validate each passenger
+    passengers.forEach((passenger, index) => {
+      if (!passenger.name.trim()) {
+        isValid = false;
+        validationError = `Please enter name for Passenger ${index + 1}`;
+      }
+
+      if (!passenger.age) {
+        isValid = false;
+        validationError = `Please enter age for Passenger ${index + 1}`;
+      }
+
+      // Age validation
+      const age = parseInt(passenger.age);
+      if (isNaN(age) || age < 1 || age > 120) {
+        isValid = false;
+        validationError = `Please enter a valid age for Passenger ${index + 1} (between 1 and 120)`;
+      }
+
+      // Name validation
+      if (passenger.name.trim().length < 3) {
+        isValid = false;
+        validationError = `Name for Passenger ${index + 1} should be at least 3 characters`;
+      }
+    });
+
+    if (!isValid) {
+      toast.error(validationError);
+    }
+
+    return isValid;
   };
 
   const handleSubmit = async (e) => {
@@ -83,14 +124,13 @@ const BookingForm = ({ train, fromStation, toStation, journeyDate, classType }) 
     
     if (!validateForm()) return;
     
-    setIsLoading(true);
-    
     try {
-      // Format journey date to YYYY-MM-DD format
-      const formattedDate = new Date(journeyDate).toISOString().split('T')[0];
-
+      setIsLoading(true);
+      
+      const userString = localStorage.getItem('user');
+      const user = JSON.parse(userString);
+      
       const bookingData = {
-        userId,
         trainId: train._id,
         trainNumber: train.trainNumber,
         trainName: train.trainName,
@@ -98,194 +138,268 @@ const BookingForm = ({ train, fromStation, toStation, journeyDate, classType }) 
           stationCode: fromStation.stationCode,
           stationName: fromStation.stationName,
           departureTime: fromStation.departureTime,
-          departureDay: fromStation.day,
-          platform: fromStation.platform || 1
+          day: fromStation.day
         },
         toStation: {
           stationCode: toStation.stationCode,
           stationName: toStation.stationName,
           arrivalTime: toStation.arrivalTime,
-          arrivalDay: toStation.day,
-          platform: toStation.platform || 1
+          day: toStation.day
         },
-        journeyDate: formattedDate,
-        classType,
-        passengers,
-        totalFare
+        journeyDate: journeyDate,
+        classType: selectedClass,
+        passengers: passengers,
+        totalFare: totalFare,
+        userId: user._id
       };
       
       const response = await axios.post(`${API_BASE_URL}/bookings/create`, bookingData);
       
       if (response.data.success) {
-        toast.success('Booking successful!');
-        // Navigate to booking confirmation page with PNR
-        navigate(`/booking/confirmation/${response.data.data.booking.pnr}`);
+        toast.success('Ticket booked successfully!');
+        navigate(`/booking/confirmation/${response.data.data.pnr}`);
+      } else {
+        throw new Error(response.data.message || 'Failed to book ticket');
       }
     } catch (error) {
-      console.error('Booking error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to create booking';
-      toast.error(errorMessage);
+      console.error('Error booking ticket:', error);
+      toast.error(error.response?.data?.message || 'Failed to book ticket');
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (!train || !fromStation || !toStation) {
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-yellow-700">
-        Please select a train and journey details first.
-      </div>
-    );
-  }
+  // Berth options based on class type
+  const getBerthOptions = () => {
+    if (selectedClass === '1A' || selectedClass === '2A' || selectedClass === '3A' || selectedClass === 'SL') {
+      return [
+        { value: 'Any', label: 'No Preference' },
+        { value: 'Lower', label: 'Lower Berth' },
+        { value: 'Middle', label: 'Middle Berth' },
+        { value: 'Upper', label: 'Upper Berth' },
+        { value: 'Side Lower', label: 'Side Lower Berth' },
+        { value: 'Side Upper', label: 'Side Upper Berth' }
+      ];
+    } else {
+      return [
+        { value: 'Any', label: 'No Preference' },
+        { value: 'Window', label: 'Window Seat' },
+        { value: 'Aisle', label: 'Aisle Seat' },
+        { value: 'Middle', label: 'Middle Seat' }
+      ];
+    }
+  };
+
+  const berthOptions = getBerthOptions();
+  const classDetails = CLASS_TYPES.find(c => c.code === selectedClass) || {
+    name: selectedClass || 'Unknown Class',
+    description: 'Travel class',
+    capacity: 0
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">Book Your Ticket</h2>
+      <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+        <FaTicketAlt className="mr-2 text-blue-600" /> Book Tickets
+      </h2>
       
-      <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-lg text-blue-800 mb-2">Journey Details</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-gray-600">Train</p>
-            <p className="font-medium">{train.trainNumber} - {train.trainName}</p>
+      {/* Class Type Info */}
+      <div className="bg-blue-50 p-4 rounded-lg mb-6">
+        <div className="flex items-start gap-4">
+          <div className="p-3 bg-blue-600 text-white rounded-lg">
+            {selectedClass && selectedClass.startsWith('A') ? (
+              <FaSnowflake className="text-2xl" />
+            ) : (
+              <FaCouch className="text-2xl" />
+            )}
           </div>
           <div>
-            <p className="text-gray-600">Date</p>
-            <p className="font-medium">{new Date(journeyDate).toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })}</p>
-          </div>
-          <div>
-            <p className="text-gray-600">From</p>
-            <p className="font-medium">{fromStation.stationCode} - {fromStation.stationName}</p>
-            <p className="text-sm text-gray-500">Dep: {fromStation.departureTime}</p>
-          </div>
-          <div>
-            <p className="text-gray-600">To</p>
-            <p className="font-medium">{toStation.stationCode} - {toStation.stationName}</p>
-            <p className="text-sm text-gray-500">Arr: {toStation.arrivalTime}</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Class</p>
-            <p className="font-medium">{classType}</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Base Fare</p>
-            <p className="font-medium">₹{fare}</p>
+            <h3 className="text-lg font-semibold text-blue-800">{classDetails.name}</h3>
+            <p className="text-gray-600">{classDetails.description}</p>
+            <div className="mt-2 flex items-center gap-6">
+              <div>
+                <span className="text-sm text-gray-500">Base Fare:</span>
+                <span className="ml-2 font-semibold text-green-600">₹{baseFare}</span>
+              </div>
+              <div>
+                <span className="text-sm text-gray-500">Total Fare ({passengers.length} passengers):</span>
+                <span className="ml-2 font-semibold text-green-600">₹{totalFare}</span>
+              </div>
+              <div>
+                <span className="text-sm text-gray-500">Available Seats:</span>
+                <span className="ml-2 font-semibold text-blue-600">{availableSeats}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      
+
       <form onSubmit={handleSubmit}>
-        <h3 className="font-semibold text-lg text-gray-800 mb-4">Passenger Details</h3>
-        
-        {passengers.map((passenger, index) => (
-          <div key={index} className="bg-gray-50 p-4 rounded-lg mb-4">
-            <div className="flex justify-between mb-2">
-              <h4 className="font-medium">Passenger {index + 1}</h4>
-              {passengers.length > 1 && (
-                <button 
-                  type="button" 
-                  onClick={() => handleRemovePassenger(index)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  Remove
-                </button>
-              )}
+        {/* Journey Summary */}
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <h3 className="text-lg font-medium text-gray-900 mb-3">Journey Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-gray-600">From</p>
+              <p className="font-semibold">{fromStation.stationName} ({fromStation.stationCode})</p>
+              <p className="text-sm text-gray-500">Departure: {fromStation.departureTime}</p>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name*</label>
-                <input
-                  type="text"
-                  value={passenger.name}
-                  onChange={(e) => handlePassengerChange(index, 'name', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Age*</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="120"
-                  value={passenger.age}
-                  onChange={(e) => handlePassengerChange(index, 'age', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                <select
-                  value={passenger.gender}
-                  onChange={(e) => handlePassengerChange(index, 'gender', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Berth Preference</label>
-                <select
-                  value={passenger.berth}
-                  onChange={(e) => handlePassengerChange(index, 'berth', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                >
-                  <option value="Any">No Preference</option>
-                  <option value="Lower">Lower</option>
-                  <option value="Middle">Middle</option>
-                  <option value="Upper">Upper</option>
-                  <option value="Side Lower">Side Lower</option>
-                  <option value="Side Upper">Side Upper</option>
-                </select>
-              </div>
+            <div>
+              <p className="text-gray-600">To</p>
+              <p className="font-semibold">{toStation.stationName} ({toStation.stationCode})</p>
+              <p className="text-sm text-gray-500">Arrival: {toStation.arrivalTime}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Date</p>
+              <p className="font-semibold">{new Date(journeyDate).toLocaleDateString('en-US', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+              })}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Distance</p>
+              <p className="font-semibold">{train.journey.distance} km</p>
+              <p className="text-sm text-gray-500">
+                Duration: {train.journey.duration.hours}h {train.journey.duration.minutes}m
+              </p>
             </div>
           </div>
-        ))}
-        
-        {passengers.length < 6 && (
-          <button
-            type="button"
-            onClick={handleAddPassenger}
-            className="flex items-center text-blue-600 hover:text-blue-800 mb-6"
-          >
-            <FaPlus className="mr-2" /> Add Passenger (Max 6)
-          </button>
-        )}
-        
-        <div className="bg-gray-50 p-4 rounded-lg mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-gray-700">Total Fare ({passengers.length} {passengers.length === 1 ? 'passenger' : 'passengers'})</p>
-              <p className="text-2xl font-bold">₹{totalFare}</p>
-            </div>
-            
+        </div>
+
+        {/* Passenger Forms */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Passenger Details</h3>
             <button
-              type="submit"
-              disabled={isLoading}
-              className="bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors duration-300 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              onClick={handleAddPassenger}
+              className="flex items-center text-blue-600 hover:text-blue-800"
+              disabled={passengers.length >= 6 || passengers.length >= availableSeats}
             >
-              {isLoading ? (
-                <>Processing...</>
-              ) : (
-                <>
-                  <FaTicketAlt />
-                  <span>Book Now</span>
-                </>
-              )}
+              <FaPlus className="mr-1" /> Add Passenger
             </button>
           </div>
+
+          {passengers.map((passenger, index) => (
+            <div key={index} className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-lg font-medium text-gray-900">Passenger {index + 1}</h4>
+                {passengers.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePassenger(index)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <FaMinus className="mr-1" /> Remove
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={passenger.name}
+                    onChange={(e) => handlePassengerChange(index, 'name', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                    minLength={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Age
+                  </label>
+                  <input
+                    type="number"
+                    value={passenger.age}
+                    onChange={(e) => handlePassengerChange(index, 'age', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                    min={1}
+                    max={120}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Gender
+                  </label>
+                  <select
+                    value={passenger.gender}
+                    onChange={(e) => handlePassengerChange(index, 'gender', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Berth/Seat Preference
+                  </label>
+                  <select
+                    value={passenger.berth}
+                    onChange={(e) => handlePassengerChange(index, 'berth', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {berthOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Booking Summary */}
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <h3 className="text-lg font-medium text-gray-900 mb-3">Booking Summary</h3>
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-gray-600">Total Passengers: {passengers.length}</p>
+              <p className="text-gray-600">Class: {classDetails.name}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-600">Base Fare: ₹{baseFare}</p>
+              <p className="text-xl font-bold text-green-600">Total: ₹{totalFare}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Submit Button */}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <span className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </span>
+            ) : (
+              <span className="flex items-center">
+                <FaTicketAlt className="mr-2" /> Book Now
+              </span>
+            )}
+          </button>
         </div>
       </form>
     </div>

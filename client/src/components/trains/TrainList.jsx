@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FaTrain, FaClock, FaRupeeSign, FaMapMarkerAlt, FaRoute, FaChevronDown, FaChevronUp, FaInfoCircle, FaTicketAlt } from 'react-icons/fa';
+import { FaTrain, FaClock, FaRupeeSign, FaMapMarkerAlt, FaRoute, FaChevronDown, FaChevronUp, FaInfoCircle, FaTicketAlt, FaCheck } from 'react-icons/fa';
 import { MdAirlineSeatReclineNormal } from 'react-icons/md';
 
-const TrainList = ({ trains, fromStation, toStation }) => {
+const TrainList = ({ trains, fromStation, toStation, classType }) => {
   const [expandedTrain, setExpandedTrain] = useState(null);
 
   // Get current date in YYYY-MM-DD format as fallback
@@ -77,6 +77,19 @@ const TrainList = ({ trains, fromStation, toStation }) => {
     return classLabels[classCode] || classCode;
   };
 
+  const getClassDescription = (classCode) => {
+    const classDescriptions = {
+      '1A': 'Most premium class with lockable, carpeted cabins',
+      '2A': 'Air-conditioned coaches with 2-tier berths',
+      '3A': 'Air-conditioned coaches with 3-tier berths',
+      'SL': 'Non-AC coaches with 3-tier berths',
+      'CC': 'Air-conditioned seating coaches',
+      '2S': 'Non-AC seating coaches',
+      'GN': 'Unreserved general coaches'
+    };
+    return classDescriptions[classCode] || '';
+  };
+
   const toggleTrainDetails = (trainId) => {
     setExpandedTrain(expandedTrain === trainId ? null : trainId);
   };
@@ -85,6 +98,19 @@ const TrainList = ({ trains, fromStation, toStation }) => {
   const getJourneyDate = () => {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('date') || getCurrentDate();
+  };
+
+  // Get the minimum fare considering class type if selected
+  const getMinimumFare = (train) => {
+    if (!train.journey?.fares) return 'N/A';
+    
+    // If class type is selected, show that fare
+    if (classType && train.journey.fares[classType]) {
+      return train.journey.fares[classType];
+    }
+    
+    // Otherwise show the minimum fare across all available classes
+    return Math.min(...Object.values(train.journey.fares));
   };
 
   if (!trains || trains.length === 0) {
@@ -133,15 +159,24 @@ const TrainList = ({ trains, fromStation, toStation }) => {
 
               <div className="flex-1 flex justify-end items-center gap-4">
                 <div>
-                  <p className="text-sm text-gray-600">Starts from</p>
+                  <p className="text-sm text-gray-600">
+                    {classType ? getClassLabel(classType) : 'Starts from'}
+                  </p>
                   <p className="font-semibold text-green-600">
                     <FaRupeeSign className="inline" />
-                    {train.journey?.fares ? Math.min(...Object.values(train.journey.fares)) : 'N/A'}
+                    {getMinimumFare(train)}
                   </p>
                 </div>
                 {expandedTrain === train._id ? <FaChevronUp /> : <FaChevronDown />}
               </div>
             </div>
+            
+            {/* Display class type if specified */}
+            {classType && train.classes.includes(classType) && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-blue-700 bg-blue-50 px-3 py-1 rounded-full w-fit">
+                <FaCheck size={12} /> {getClassLabel(classType)} available
+              </div>
+            )}
           </div>
 
           {/* Expanded Details */}
@@ -212,27 +247,71 @@ const TrainList = ({ trains, fromStation, toStation }) => {
                 </div>
               </div>
 
+{/* we are not adding this here, */}
               {/* Classes and Fares */}
-              <div>
+              {/* <div>
                 <h4 className="text-md font-semibold mb-2 flex items-center gap-2">
                   <MdAirlineSeatReclineNormal className="text-blue-600" />
                   Available Classes
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {train.classes.map((classType) => (
-                    <div key={classType} className="bg-gray-50 p-3 rounded-lg">
-                      <p className="font-medium">{getClassLabel(classType)}</p>
-                      <p className="text-green-600 font-semibold">
-                        <FaRupeeSign className="inline" />
-                        {train.journey.fares?.[classType] || 'N/A'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {train.availableSeats?.[classType] || 0} seats
-                      </p>
-                    </div>
-                  ))}
+                  {train.classes.map((cls) => {
+                    const isSelected = classType === cls;
+                    const fare = train.journey.fares?.[cls] || 'N/A';
+                    const seats = train.availableSeats?.[cls] || 0;
+                    const description = getClassDescription(cls);
+                    
+                    return (
+                      <div 
+                        key={cls} 
+                        className={`
+                          ${isSelected 
+                            ? 'bg-blue-50 border-2 border-blue-500 shadow-md' 
+                            : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                          } 
+                          p-4 rounded-lg transition-all duration-300 flex flex-col
+                        `}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-800">{getClassLabel(cls)}</span>
+                            <span className="text-xs text-gray-500">({cls})</span>
+                          </div>
+                          {isSelected && (
+                            <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
+                              Selected
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="mt-2 flex items-center gap-2">
+                          <FaRupeeSign className="text-green-600" />
+                          <span className="font-bold text-green-600 text-lg">{fare}</span>
+                        </div>
+                        
+                        <div className="mt-1 flex justify-between items-center">
+                          <div className="flex items-center text-sm">
+                            <span className={`${seats > 0 ? 'text-green-600' : 'text-red-500'} font-medium`}>
+                              {seats > 0 ? `${seats} seats` : 'Not available'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <p className="text-xs text-gray-600 mt-2">{description}</p>
+                        
+                        {isSelected && (
+                          <Link
+                            to={`/trains/${train._id}/${train.journey.fromStation.stationCode}/${train.journey.toStation.stationCode}/${getJourneyDate()}?book=true&class=${cls}`}
+                            className="mt-2 text-center text-sm bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 transition-colors duration-200"
+                          >
+                            Book {getClassLabel(cls)}
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              </div> */}
 
               {/* Amenities */}
               {train.amenities && train.amenities.length > 0 && (
@@ -257,7 +336,7 @@ const TrainList = ({ trains, fromStation, toStation }) => {
                   <FaInfoCircle className="mr-1" /> View Details
                 </Link>
                 <Link
-                  to={`/trains/${train._id}/${train.journey.fromStation.stationCode}/${train.journey.toStation.stationCode}/${getJourneyDate()}?book=true`}
+                  to={`/trains/${train._id}/${train.journey.fromStation.stationCode}/${train.journey.toStation.stationCode}/${getJourneyDate()}?book=true${classType ? `&class=${classType}` : ''}`}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-300 text-sm flex items-center"
                 >
                   <FaTicketAlt className="mr-1" /> Book Now

@@ -2,16 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { FaArrowLeft, FaCalendarAlt, FaClock, FaRoute, FaMapMarkerAlt, FaTrain, FaRupeeSign, FaListAlt, FaUser, FaArrowRight, FaWifi, FaUtensils, FaToilet, FaLightbulb, FaPlug } from 'react-icons/fa';
+import { FaArrowLeft, FaCalendarAlt, FaClock, FaRoute, FaMapMarkerAlt, FaTrain, FaRupeeSign, FaListAlt, FaUser, FaArrowRight, FaWifi, FaUtensils, FaToilet, FaLightbulb, FaPlug, FaSnowflake, FaCouch } from 'react-icons/fa';
 import BookingForm from '../components/booking/BookingForm';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
+// Class types with descriptions and capacities
+const CLASS_TYPES = [
+  { code: "1A", name: "AC First Class (1A)", description: "Most premium class with lockable, carpeted cabins", capacity: 18 },
+  { code: "2A", name: "AC 2 Tier (2A)", description: "Air-conditioned coaches with 2-tier berths", capacity: 52 },
+  { code: "3A", name: "AC 3 Tier (3A)", description: "Air-conditioned coaches with 3-tier berths", capacity: 64 },
+  { code: "SL", name: "Sleeper (SL)", description: "Non-AC coaches with 3-tier berths", capacity: 72 },
+  { code: "CC", name: "Chair Car (CC)", description: "Air-conditioned seating coaches", capacity: 78 },
+  { code: "2S", name: "Second Sitting (2S)", description: "Non-AC seating coaches", capacity: 108 },
+  { code: "GN", name: "General (GN)", description: "Unreserved general coaches", capacity: 150 }
+];
+
 const TrainDetails = () => {
   const { trainId, fromStation, toStation, date } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const preferredClass = searchParams.get('class') || '';
   const [train, setTrain] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -27,6 +40,18 @@ const TrainDetails = () => {
   ]);
   const [currentUser, setCurrentUser] = useState(null);
   const [totalFare, setTotalFare] = useState(0);
+
+  // Add these new state variables
+  const [availableSeats, setAvailableSeats] = useState({});
+  const [selectedClassDetails, setSelectedClassDetails] = useState(null);
+
+  // Get class details
+  const getClassDetails = (classCode) => {
+    return CLASS_TYPES.find(cls => cls.code === classCode) || { 
+      name: classCode, 
+      description: 'Travel class' 
+    };
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -98,11 +123,6 @@ const TrainDetails = () => {
                   fares
                 }
               });
-              
-              // Set default selected class
-              if (trainData.classes && trainData.classes.length > 0) {
-                setSelectedClass(trainData.classes[0]);
-              }
             } else {
               setError('One or both stations are not in this train\'s route');
             }
@@ -127,7 +147,7 @@ const TrainDetails = () => {
   
   useEffect(() => {
     if (train && selectedClass) {
-      const baseFare = train.journey.fares[selectedClass] || 0;
+      const baseFare = train.journey?.fares?.[selectedClass] || 0;
       const newTotalFare = baseFare * passengers.length;
       setTotalFare(newTotalFare);
     }
@@ -135,16 +155,32 @@ const TrainDetails = () => {
   
   // Check if the booking form should be shown automatically
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
     const shouldShowBookingForm = searchParams.get('book') === 'true';
-    if (shouldShowBookingForm) {
+    if (shouldShowBookingForm && selectedClass) {
       setShowBookingForm(true);
     }
-  }, [location.search]);
+  }, [location.search, selectedClass]);
   
-  const handleClassSelect = (selectedClass) => {
-    setSelectedClass(selectedClass);
+  const handleClassSelect = (classType) => {
+    if (!train?.classes?.includes(classType)) {
+      toast.error(`Class ${classType} is not available on this train`);
+      return;
+    }
+
+    const classDetails = CLASS_TYPES.find(c => c.code === classType);
+    if (!classDetails) {
+      toast.error('Invalid class type selected');
+      return;
+    }
+
+    setSelectedClass(classType);
+    setSelectedClassDetails(classDetails);
     setShowBookingForm(true);
+
+    // Update URL with selected class
+    const newSearchParams = new URLSearchParams(location.search);
+    newSearchParams.set('class', classType);
+    navigate(`${location.pathname}?${newSearchParams.toString()}`, { replace: true });
   };
   
   const formatTime = (timeString) => {
@@ -293,9 +329,60 @@ const TrainDetails = () => {
     e.preventDefault();
     
     try {
-      if (!currentUser) {
+      // Get token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
         toast.error('Please login to book tickets');
         navigate('/login');
+        return;
+      }
+
+      // Get user data from localStorage
+      const userString = localStorage.getItem('user');
+      if (!userString) {
+        toast.error('User information not found. Please login again');
+        navigate('/login');
+        return;
+      }
+
+      const user = JSON.parse(userString);
+      if (!user.userId) {
+        toast.error('Invalid user information. Please login again');
+        navigate('/login');
+        return;
+      }
+
+      // Add token to request headers
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      // Validate all required fields
+      if (!trainId) {
+        toast.error('Train ID is missing');
+        return;
+      }
+
+      if (!fromStation || !toStation) {
+        toast.error('Please select both source and destination stations');
+        return;
+      }
+
+      if (!journeyDate) {
+        toast.error('Please select a journey date');
+        return;
+      }
+
+      if (!selectedClass) {
+        toast.error('Please select a travel class');
+        return;
+      }
+
+      if (!passengers || passengers.length === 0) {
+        toast.error('Please add at least one passenger');
+        return;
+      }
+
+      if (!totalFare || totalFare <= 0) {
+        toast.error('Invalid fare calculation');
         return;
       }
       
@@ -307,19 +394,81 @@ const TrainDetails = () => {
         toast.error('Please fill all passenger details');
         return;
       }
+
+      // Validate age
+      const hasInvalidAge = passengers.some(p => p.age < 1 || p.age > 120);
+      if (hasInvalidAge) {
+        toast.error('Please enter valid age for all passengers');
+        return;
+      }
+
+      // Validate journey date
+      const selectedDate = new Date(journeyDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       
+      if (selectedDate < today) {
+        toast.error('Cannot book tickets for past dates');
+        return;
+      }
+
+      // Prepare booking data with all required fields
       const bookingData = {
         trainId: train._id,
+        fromStation: {
+          stationCode: train.journey.fromStation.stationCode,
+          stationName: train.journey.fromStation.stationName,
+          departureTime: train.journey.fromStation.departureTime,
+          day: train.journey.fromStation.day,
+          platform: train.journey.fromStation.platform || 1
+        },
+        toStation: {
+          stationCode: train.journey.toStation.stationCode,
+          stationName: train.journey.toStation.stationName,
+          arrivalTime: train.journey.toStation.arrivalTime,
+          day: train.journey.toStation.day,
+          platform: train.journey.toStation.platform || 1
+        },
+        journeyDate: journeyDate,
+        classType: selectedClass,
+        passengers: passengers.map(p => ({
+          name: p.name.trim(),
+          age: parseInt(p.age),
+          gender: p.gender,
+          berthPreference: p.berth
+        })),
+        totalFare: totalFare,
+        userId: user.userId, // Fixed userId reference
         trainNumber: train.trainNumber,
         trainName: train.trainName,
-        fromStation: train.journey.fromStation,
-        toStation: train.journey.toStation,
-        journeyDate: train.journey.date,
-        classType: selectedClass,
-        passengers,
-        totalFare,
-        userId: currentUser._id
+        bookingStatus: 'confirmed',
+        bookingDate: new Date().toISOString(),
+        distance: train.journey.distance,
+        duration: train.journey.duration
       };
+
+      // Detailed console logging for debugging
+      console.log('=== Booking Data Debug ===');
+      console.log('Auth Token:', token);
+      console.log('User Details:', {
+        userId: user.userId, // Fixed userId reference
+        // Don't log sensitive user information
+      });
+      console.log('Train Details:', {
+        trainId: train._id,
+        trainNumber: train.trainNumber,
+        trainName: train.trainName
+      });
+      console.log('From Station:', bookingData.fromStation);
+      console.log('To Station:', bookingData.toStation);
+      console.log('Journey Date:', bookingData.journeyDate);
+      console.log('Class Type:', bookingData.classType);
+      console.log('Passengers:', bookingData.passengers);
+      console.log('Total Fare:', bookingData.totalFare);
+      console.log('Distance:', bookingData.distance);
+      console.log('Duration:', bookingData.duration);
+      console.log('Complete Booking Data:', bookingData);
+      console.log('========================');
       
       const response = await axios.post(`${API_BASE_URL}/bookings/create`, bookingData);
       
@@ -331,7 +480,20 @@ const TrainDetails = () => {
       }
     } catch (error) {
       console.error('Error creating booking:', error);
-      toast.error(error.response?.data?.message || error.message || 'Booking failed');
+      console.error('Error Response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.message || 'Booking failed';
+      toast.error(errorMessage);
+      
+      // Handle specific error cases
+      if (errorMessage.includes('seat availability')) {
+        toast.error('Selected class is no longer available. Please choose another class.');
+      } else if (errorMessage.includes('journey date')) {
+        toast.error('Invalid journey date. Please select a valid date.');
+      } else if (errorMessage.includes('train')) {
+        toast.error('Train details are invalid. Please try again.');
+      } else if (errorMessage.includes('required booking details')) {
+        toast.error('Please check all booking details and try again.');
+      }
     }
   };
 
@@ -473,34 +635,58 @@ const TrainDetails = () => {
                     )}
                   </div>
                 </div>
-                
-                <div className="border-t border-gray-200 pt-4">
-                  <h4 className="font-medium text-gray-700 mb-2">Available Classes</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {train.classes.map((cls) => (
-                      <button
-                        key={cls}
-                        onClick={() => handleClassSelect(cls)}
-                        className={`p-3 rounded-lg ${
-                          selectedClass === cls
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                        }`}
-                      >
-                        <div className="font-semibold">{cls}</div>
-                        {train.journey.fares && (
-                          <div className={selectedClass === cls ? 'text-blue-100' : 'text-gray-600'}>
-                            ₹{train.journey.fares[cls]}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
           </div>
         </div>
+        
+        {/* Class Selection */}
+        {train.journey && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Select Travel Class</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {train.classes.map((cls) => {
+                const classDetails = getClassDetails(cls);
+                return (
+                  <button
+                    key={cls}
+                    onClick={() => handleClassSelect(cls)}
+                    className={`p-4 rounded-lg text-left transition-all duration-300 ${
+                      selectedClass === cls
+                        ? 'bg-blue-600 text-white border-2 border-blue-700 shadow-md'
+                        : 'bg-white text-gray-800 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center">
+                        {cls.startsWith('A') ? (
+                          <FaSnowflake className={`mr-2 ${selectedClass === cls ? 'text-white' : 'text-blue-500'}`} />
+                        ) : (
+                          <FaCouch className={`mr-2 ${selectedClass === cls ? 'text-white' : 'text-gray-500'}`} />
+                        )}
+                        <span className="text-lg font-bold">{cls}</span>
+                      </div>
+                      {train.journey.fares && (
+                        <span className={`font-semibold ${selectedClass === cls ? 'text-white' : 'text-green-600'}`}>
+                          ₹{train.journey.fares[cls]}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`text-sm mb-1 ${selectedClass === cls ? 'text-blue-100' : 'text-gray-700'}`}>
+                      {classDetails.name}
+                    </div>
+                    <div className={`text-xs ${selectedClass === cls ? 'text-blue-100' : 'text-gray-500'}`}>
+                      {classDetails.description}
+                    </div>
+                    <div className={`text-xs mt-2 ${selectedClass === cls ? 'text-blue-100' : 'text-gray-500'}`}>
+                      Available Seats: {train.availableSeats[cls]}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
         {/* Route and Stations */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
@@ -557,10 +743,12 @@ const TrainDetails = () => {
         {showBookingForm && selectedClass && journeyFrom && journeyTo && (
           <BookingForm
             train={train}
+            selectedClass={selectedClass}
             fromStation={journeyFrom}
             toStation={journeyTo}
             journeyDate={journeyDate}
-            classType={selectedClass}
+            fare={train.journey.fares[selectedClass]}
+            onSubmit={handleBookingSubmit}
           />
         )}
         

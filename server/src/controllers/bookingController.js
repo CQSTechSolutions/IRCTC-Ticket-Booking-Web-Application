@@ -19,6 +19,7 @@ export const createBooking = async (req, res) => {
             userId
         } = req.body;
 
+        console.log(req.body);
         // Validate request body
         if (!trainId || !fromStation || !toStation || !journeyDate || !classType || !passengers || !totalFare || !userId) {
             return res.status(400).json({
@@ -99,8 +100,45 @@ export const createBooking = async (req, res) => {
             });
         }
 
+        // Check seat availability
+        const existingBookings = await Booking.find({
+            train: trainId,
+            journeyDate: {
+                $gte: new Date(selectedDate.setHours(0, 0, 0, 0)),
+                $lt: new Date(selectedDate.setHours(23, 59, 59, 999))
+            },
+            classType,
+            status: { $ne: 'Cancelled' }
+        });
+
+        const totalBookedSeats = existingBookings.reduce((total, booking) => total + booking.passengers.length, 0);
+        const availableSeats = train.availableSeats[classType] - totalBookedSeats;
+
+        if (passengers.length > availableSeats) {
+            return res.status(400).json({
+                success: false,
+                message: `Only ${availableSeats} seats available in ${classType} class`
+            });
+        }
+
+        // Validate fare calculation
+        const distance = train.stations[toStationIndex].distance - train.stations[fromStationIndex].distance;
+        const calculatedFare = Math.ceil(distance * train.farePerKm[classType]);
+        const expectedTotalFare = calculatedFare * passengers.length;
+
+        if (Math.abs(totalFare - expectedTotalFare) > 1) { // Allow for minor rounding differences
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid fare calculation'
+            });
+        }
+
+        // Generate PNR
+        const pnr = generatePNR();
+
         // Create a new booking
         const newBooking = await Booking.create({
+            pnr,
             user: userId,
             train: trainId,
             trainNumber,
@@ -112,13 +150,22 @@ export const createBooking = async (req, res) => {
             passengers,
             totalFare,
             status: 'Confirmed',
-            paymentStatus: 'Completed' // In a real app, this would be set after payment processing
+            paymentStatus: 'Completed', // In a real app, this would be set after payment processing
+            bookingDate: new Date()
+        });
+
+        // Update available seats
+        await Train.findByIdAndUpdate(trainId, {
+            $inc: {
+                [`availableSeats.${classType}`]: -passengers.length
+            }
         });
 
         res.status(201).json({
             success: true,
             message: 'Booking created successfully',
             data: {
+                pnr: newBooking.pnr,
                 booking: newBooking
             }
         });
@@ -130,6 +177,13 @@ export const createBooking = async (req, res) => {
             error: error.message
         });
     }
+};
+
+// Helper function to generate PNR
+const generatePNR = () => {
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `PNR${timestamp}${random}`;
 };
 
 // Get all bookings for a user
