@@ -160,8 +160,24 @@ export const searchTrains = async (req, res) => {
             return {
                 ...train.toObject(),
                 journey: {
-                    fromStation: fromStationObj,
-                    toStation: toStationObj,
+                    fromStation: {
+                        stationCode: fromStationObj.stationCode,
+                        stationName: fromStationObj.stationName,
+                        departureTime: fromStationObj.departureTime,
+                        day: fromStationObj.day,
+                        departureDay: fromStationObj.day,
+                        platform: fromStationObj.platform || 1,
+                        distance: fromStationObj.distance
+                    },
+                    toStation: {
+                        stationCode: toStationObj.stationCode,
+                        stationName: toStationObj.stationName,
+                        arrivalTime: toStationObj.arrivalTime,
+                        day: toStationObj.day,
+                        arrivalDay: toStationObj.day,
+                        platform: toStationObj.platform || 1,
+                        distance: toStationObj.distance
+                    },
                     distance,
                     duration: journeyTime,
                     intermediateStations,

@@ -346,7 +346,7 @@ const TrainDetails = () => {
       }
 
       const user = JSON.parse(userString);
-      if (!user.userId) {
+      if (!user._id) {
         toast.error('Invalid user information. Please login again');
         navigate('/login');
         return;
@@ -419,14 +419,14 @@ const TrainDetails = () => {
           stationCode: train.journey.fromStation.stationCode,
           stationName: train.journey.fromStation.stationName,
           departureTime: train.journey.fromStation.departureTime,
-          day: train.journey.fromStation.day,
+          departureDay: train.journey.fromStation.departureDay || train.journey.fromStation.day || 1,
           platform: train.journey.fromStation.platform || 1
         },
         toStation: {
           stationCode: train.journey.toStation.stationCode,
           stationName: train.journey.toStation.stationName,
           arrivalTime: train.journey.toStation.arrivalTime,
-          day: train.journey.toStation.day,
+          arrivalDay: train.journey.toStation.arrivalDay || train.journey.toStation.day || 1,
           platform: train.journey.toStation.platform || 1
         },
         journeyDate: journeyDate,
@@ -438,7 +438,7 @@ const TrainDetails = () => {
           berthPreference: p.berth
         })),
         totalFare: totalFare,
-        userId: user.userId, // Fixed userId reference
+        userId: user._id,
         trainNumber: train.trainNumber,
         trainName: train.trainName,
         bookingStatus: 'confirmed',
@@ -447,28 +447,9 @@ const TrainDetails = () => {
         duration: train.journey.duration
       };
 
-      // Detailed console logging for debugging
-      console.log('=== Booking Data Debug ===');
-      console.log('Auth Token:', token);
-      console.log('User Details:', {
-        userId: user.userId, // Fixed userId reference
-        // Don't log sensitive user information
-      });
-      console.log('Train Details:', {
-        trainId: train._id,
-        trainNumber: train.trainNumber,
-        trainName: train.trainName
-      });
-      console.log('From Station:', bookingData.fromStation);
-      console.log('To Station:', bookingData.toStation);
-      console.log('Journey Date:', bookingData.journeyDate);
-      console.log('Class Type:', bookingData.classType);
-      console.log('Passengers:', bookingData.passengers);
-      console.log('Total Fare:', bookingData.totalFare);
-      console.log('Distance:', bookingData.distance);
-      console.log('Duration:', bookingData.duration);
-      console.log('Complete Booking Data:', bookingData);
-      console.log('========================');
+      console.log('Booking data:', bookingData);
+      console.log('From station day:', train.journey.fromStation.departureDay || train.journey.fromStation.day);
+      console.log('To station day:', train.journey.toStation.arrivalDay || train.journey.toStation.day);
       
       const response = await axios.post(`${API_BASE_URL}/bookings/create`, bookingData);
       

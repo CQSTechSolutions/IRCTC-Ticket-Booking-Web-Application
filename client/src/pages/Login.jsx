@@ -69,9 +69,11 @@ const Login = () => {
                 const data = await response.json();
                 
                 if (response.ok) {
-                    // Store token in localStorage or use a state management solution
-                    localStorage.setItem('token', data.token);                    
-                    // Redirect to home pages
+                    // Store token and user data in localStorage
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    
+                    // Redirect to home page
                     navigate('/');
                 } else {
                     alert(data.message || "Login failed");

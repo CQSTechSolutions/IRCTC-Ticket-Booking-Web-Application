@@ -100,6 +100,22 @@ export const createBooking = async (req, res) => {
             });
         }
 
+        // Validate station data
+        if (!fromStation.departureDay || !toStation.arrivalDay) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing station day information'
+            });
+        }
+
+        // Validate station day sequence
+        if (fromStation.departureDay > toStation.arrivalDay) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid station day sequence'
+            });
+        }
+
         // Check seat availability
         const existingBookings = await Booking.find({
             train: trainId,

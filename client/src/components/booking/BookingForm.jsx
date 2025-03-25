@@ -122,50 +122,84 @@ const BookingForm = ({ train, selectedClass, fromStation, toStation, journeyDate
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
-    
     try {
-      setIsLoading(true);
-      
+      // Get token and user data
+      const token = localStorage.getItem('token');
       const userString = localStorage.getItem('user');
+      
+      if (!token || !userString) {
+        toast.error('Please login to book tickets');
+        navigate('/login');
+        return;
+      }
+
       const user = JSON.parse(userString);
       
+      // Set authorization header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      // Prepare booking data
       const bookingData = {
         trainId: train._id,
-        trainNumber: train.trainNumber,
-        trainName: train.trainName,
         fromStation: {
           stationCode: fromStation.stationCode,
           stationName: fromStation.stationName,
           departureTime: fromStation.departureTime,
-          day: fromStation.day
+          departureDay: fromStation.departureDay || fromStation.day || 1,
+          platform: fromStation.platform || 1
         },
         toStation: {
           stationCode: toStation.stationCode,
           stationName: toStation.stationName,
           arrivalTime: toStation.arrivalTime,
-          day: toStation.day
+          arrivalDay: toStation.arrivalDay || toStation.day || 1,
+          platform: toStation.platform || 1
         },
-        journeyDate: journeyDate,
+        journeyDate,
         classType: selectedClass,
-        passengers: passengers,
-        totalFare: totalFare,
-        userId: user._id
+        passengers: passengers.map(p => ({
+          name: p.name.trim(),
+          age: parseInt(p.age),
+          gender: p.gender,
+          berthPreference: p.berth
+        })),
+        totalFare,
+        userId: user._id,
+        trainNumber: train.trainNumber,
+        trainName: train.trainName,
+        bookingStatus: 'confirmed',
+        bookingDate: new Date().toISOString(),
+        distance: train.journey.distance,
+        duration: train.journey.duration
       };
-      
-      const response = await axios.post(`${API_BASE_URL}/bookings/create`, bookingData);
-      
-      if (response.data.success) {
-        toast.success('Ticket booked successfully!');
-        navigate(`/booking/confirmation/${response.data.data.pnr}`);
+
+      // Debug logging
+      console.log('=== Booking Data Debug ===');
+      console.log('Auth Token Present:', !!token);
+      console.log('User ID:', user._id);
+      console.log('Train ID:', bookingData.trainId);
+      console.log('From Station:', bookingData.fromStation);
+      console.log('To Station:', bookingData.toStation);
+      console.log('Journey Date:', bookingData.journeyDate);
+      console.log('Class Type:', bookingData.classType);
+      console.log('Passengers:', bookingData.passengers);
+      console.log('Total Fare:', bookingData.totalFare);
+      console.log('Complete Booking Data:', bookingData);
+      console.log('========================');
+
+      const response = await axios.post('http://localhost:3000/api/bookings/create', bookingData);
+
+      if (response.data?.success) {
+        toast.success('Booking successful!');
+        navigate(`/booking/confirmation/${response.data.data.booking.pnr}`);
       } else {
-        throw new Error(response.data.message || 'Failed to book ticket');
+        throw new Error(response.data?.message || 'Booking failed');
       }
     } catch (error) {
       console.error('Error booking ticket:', error);
-      toast.error(error.response?.data?.message || 'Failed to book ticket');
-    } finally {
-      setIsLoading(false);
+      console.error('Error Response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.message || 'Booking failed';
+      toast.error(errorMessage);
     }
   };
 
