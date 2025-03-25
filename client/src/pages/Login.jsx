@@ -71,9 +71,9 @@ const Login = () => {
                 if (response.ok) {
                     // Store token and user data in localStorage
                     localStorage.setItem('token', data.token);
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    
-                    // Redirect to home page
+                    // localStorage.setItem('user', JSON.stringify(data.user));
+                    const expirationTime = new Date().getTime() + 3600000;
+                    localStorage.setItem('expirationTime', expirationTime.toString());
                     navigate('/');
                 } else {
                     alert(data.message || "Login failed");
