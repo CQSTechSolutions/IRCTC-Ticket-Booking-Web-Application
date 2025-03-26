@@ -53,6 +53,16 @@ const TrainDetails = () => {
     };
   };
 
+  // Get maximum date (1 year from now)
+  const getMaxDate = () => {
+    const maxDate = new Date();
+    maxDate.setFullYear(maxDate.getFullYear() + 1);
+    const year = maxDate.getFullYear();
+    const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+    const day = String(maxDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -333,21 +343,16 @@ const TrainDetails = () => {
       const token = localStorage.getItem('token');
       if (!token) {
         toast.error('Please login to book tickets');
+        // Save current location to return after login
+        localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
         navigate('/login');
         return;
       }
 
-      // Get user data from localStorage
-      const userString = localStorage.getItem('user');
-      if (!userString) {
+      // Get user data, make sure currentUser is available
+      if (!currentUser || !currentUser._id) {
         toast.error('User information not found. Please login again');
-        navigate('/login');
-        return;
-      }
-
-      const user = JSON.parse(userString);
-      if (!user._id) {
-        toast.error('Invalid user information. Please login again');
+        localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
         navigate('/login');
         return;
       }
@@ -438,7 +443,7 @@ const TrainDetails = () => {
           berthPreference: p.berth
         })),
         totalFare: totalFare,
-        userId: user._id,
+        userId: currentUser._id, // Use currentUser instead of user
         trainNumber: train.trainNumber,
         trainName: train.trainName,
         bookingStatus: 'confirmed',
@@ -474,6 +479,12 @@ const TrainDetails = () => {
         toast.error('Train details are invalid. Please try again.');
       } else if (errorMessage.includes('required booking details')) {
         toast.error('Please check all booking details and try again.');
+      } else if (errorMessage.toLowerCase().includes('unauthorized') || 
+                errorMessage.toLowerCase().includes('token') || 
+                errorMessage.toLowerCase().includes('login')) {
+        toast.error('Session expired. Please login again');
+        localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
+        navigate('/login');
       }
     }
   };
@@ -669,6 +680,23 @@ const TrainDetails = () => {
           </div>
         )}
         
+        {/* Journey Date Selection */}
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+            <FaCalendarAlt className="mr-2 text-blue-600" /> Journey Date
+          </h2>
+          <div className="max-w-sm">
+            <input
+              type="date"
+              value={journeyDate}
+              onChange={(e) => setJourneyDate(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
+              max={getMaxDate()}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
         {/* Route and Stations */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">

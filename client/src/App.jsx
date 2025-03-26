@@ -1,5 +1,5 @@
 import React, {useEffect} from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -10,15 +10,20 @@ import Navbar from "./components/Navbar";
 import { Toaster } from 'react-hot-toast';
 
 const App = () =>{
-  
+  const navigate = useNavigate();
+
   useEffect(() => {
     const expirationTime = localStorage.getItem('expirationTime');
     if (expirationTime) {
       const currentTime = new Date().getTime();
       if (currentTime > expirationTime) {
         localStorage.clear();
-        window.location.href = '/login';
+        navigate('/login');
       }
+    }
+    else{
+      localStorage.clear();
+      navigate("/");
     }
   }, []);
 

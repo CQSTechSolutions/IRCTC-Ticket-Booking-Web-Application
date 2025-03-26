@@ -54,17 +54,27 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
       try {
         const response = await axios.get('http://localhost:3000/api/trains');
         if (response.data && response.data.data) {
-          // Extract unique stations from all trains
-          const uniqueStations = new Set();
+          // Create a Map to store unique stations using a composite key of code and name
+          const stationsMap = new Map();
+          
           response.data.data.forEach(train => {
             train.stations.forEach(station => {
-              uniqueStations.add(JSON.stringify({
-                code: station.stationCode,
-                name: station.stationName
-              }));
+              const key = `${station.stationCode}-${station.stationName}`;
+              if (!stationsMap.has(key)) {
+                stationsMap.set(key, {
+                  code: station.stationCode,
+                  name: station.stationName
+                });
+              }
             });
           });
-          const stationsList = Array.from(uniqueStations).map(station => JSON.parse(station));
+
+          // Convert Map values to array
+          const stationsList = Array.from(stationsMap.values());
+          
+          // Sort stations by code
+          stationsList.sort((a, b) => a.code.localeCompare(b.code));
+          
           setStations(stationsList);
           setFilteredFromStations(stationsList);
           setFilteredToStations(stationsList);
@@ -321,4 +331,4 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
   );
 };
 
-export default TrainSearch; 
+export default TrainSearch;

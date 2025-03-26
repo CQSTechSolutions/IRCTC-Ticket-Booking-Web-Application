@@ -71,10 +71,18 @@ const Login = () => {
                 if (response.ok) {
                     // Store token and user data in localStorage
                     localStorage.setItem('token', data.token);
-                    // localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.setItem('user', JSON.stringify(data.user));
                     const expirationTime = new Date().getTime() + 3600000;
                     localStorage.setItem('expirationTime', expirationTime.toString());
-                    navigate('/');
+                    
+                    // Check if there's a redirect path saved
+                    const redirectPath = localStorage.getItem('redirectAfterLogin');
+                    if (redirectPath) {
+                        localStorage.removeItem('redirectAfterLogin'); // Clean up
+                        navigate(redirectPath);
+                    } else {
+                        navigate('/');
+                    }
                 } else {
                     alert(data.message || "Login failed");
                 }
