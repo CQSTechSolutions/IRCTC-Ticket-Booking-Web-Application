@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FaTrain, FaClock, FaRupeeSign, FaMapMarkerAlt, FaRoute, FaChevronDown, FaChevronUp, FaInfoCircle, FaTicketAlt, FaCheck } from 'react-icons/fa';
+import { FaTrain, FaClock, FaRupeeSign, FaMapMarkerAlt, FaRoute, FaChevronDown, FaChevronUp, FaInfoCircle, FaTicketAlt, FaCheck, FaArrowRight } from 'react-icons/fa';
 import { MdAirlineSeatReclineNormal } from 'react-icons/md';
 
 const TrainList = ({ trains, fromStation, toStation, classType }) => {
@@ -31,31 +31,77 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
 
   const calculateDuration = (fromTime, toTime, fromDay, toDay) => {
     try {
-      const startDate = new Date(`2024-01-${fromDay}T${fromTime}`);
-      const endDate = new Date(`2024-01-${toDay}T${toTime}`);
-      const diff = endDate - startDate;
+      // Handle missing inputs
+      if (!fromTime || !toTime || fromDay === undefined || toDay === undefined) {
+        return { hours: 0, minutes: 0 };
+      }
+      
+      // Ensure fromDay and toDay are numbers
+      const startDay = parseInt(fromDay) || 1;
+      const endDay = parseInt(toDay) || 1;
+      
+      // Create valid date objects
+      const startDate = new Date(`2024-01-${startDay}T${fromTime}`);
+      const endDate = new Date(`2024-01-${endDay}T${toTime}`);
+      
+      // Check if dates are valid
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        console.error('Invalid date objects in calculateDuration', { fromTime, toTime, startDay, endDay });
+        return { hours: 0, minutes: 0 };
+      }
+      
+      // Handle days correctly - if endDay < startDay, assume crossing to next month
+      let adjustedEndDate = new Date(endDate);
+      if (endDay < startDay) {
+        adjustedEndDate.setMonth(adjustedEndDate.getMonth() + 1);
+      }
+      
+      // Calculate time difference in milliseconds
+      const diff = adjustedEndDate - startDate;
+      if (diff < 0) {
+        // If still negative, adjust by adding days until positive
+        adjustedEndDate.setDate(adjustedEndDate.getDate() + 30);
+        const newDiff = adjustedEndDate - startDate;
+        const hours = Math.floor(newDiff / (1000 * 60 * 60));
+        const minutes = Math.floor((newDiff % (1000 * 60 * 60)) / (1000 * 60));
+        return { hours, minutes };
+      }
+      
       const hours = Math.floor(diff / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       return { hours, minutes };
     } catch (error) {
-      console.error('Error calculating duration:', error);
+      console.error('Error calculating duration:', error, { fromTime, toTime, fromDay, toDay });
       return { hours: 0, minutes: 0 };
     }
   };
 
   const formatDuration = (fromStation, toStation) => {
-    if (!fromStation || !toStation) return 'N/A';
+    if (!fromStation || !toStation) return '--';
+    
     try {
-      const duration = calculateDuration(
-        fromStation.departureTime || fromStation.arrivalTime,
-        toStation.arrivalTime || toStation.departureTime,
-        fromStation.day,
-        toStation.day
-      );
+      // Extract required values, providing fallbacks
+      const departureTime = fromStation.departureTime || fromStation.arrivalTime;
+      const arrivalTime = toStation.arrivalTime || toStation.departureTime;
+      const fromDay = fromStation.day || 1;
+      const toDay = toStation.day || 1;
+      
+      // Skip calculation if critical data is missing
+      if (!departureTime || !arrivalTime) {
+        return '--';
+      }
+      
+      const duration = calculateDuration(departureTime, arrivalTime, fromDay, toDay);
+      
+      // Format the duration nicely
+      if (duration.hours === 0 && duration.minutes === 0) {
+        return '--';
+      }
+      
       return `${duration.hours}h ${duration.minutes}m`;
     } catch (error) {
-      console.error('Error formatting duration:', error);
-      return 'N/A';
+      console.error('Error formatting duration:', error, { fromStation, toStation });
+      return '--';
     }
   };
 
@@ -102,7 +148,22 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
 
   // Get the minimum fare considering class type if selected
   const getMinimumFare = (train) => {
-    if (!train.journey?.fares) return 'N/A';
+    if (!train.journey?.fares) {
+      // If fares are not available in journey object, calculate based on distance
+      if (train.journey?.distance && train.farePerKm) {
+        if (classType && train.farePerKm[classType]) {
+          return Math.ceil(train.journey.distance * train.farePerKm[classType]);
+        }
+        
+        // Find minimum fare across all classes
+        const fares = Object.keys(train.farePerKm)
+          .filter(cls => train.classes.includes(cls))
+          .map(cls => Math.ceil(train.journey.distance * train.farePerKm[cls]));
+          
+        return fares.length > 0 ? Math.min(...fares) : 'N/A';
+      }
+      return 'N/A';
+    }
     
     // If class type is selected, show that fare
     if (classType && train.journey.fares[classType]) {
@@ -110,7 +171,17 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
     }
     
     // Otherwise show the minimum fare across all available classes
-    return Math.min(...Object.values(train.journey.fares));
+    const availableFares = Object.entries(train.journey.fares)
+      .filter(([cls]) => train.classes.includes(cls))
+      .map(([_, fare]) => fare);
+      
+    return availableFares.length > 0 ? Math.min(...availableFares) : 'N/A';
+  };
+  
+  // Format fare with currency symbol
+  const formatFare = (fare) => {
+    if (fare === 'N/A' || fare === undefined) return 'N/A';
+    return `₹${fare}`;
   };
 
   if (!trains || trains.length === 0) {
@@ -164,7 +235,7 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
                   </p>
                   <p className="font-semibold text-green-600">
                     <FaRupeeSign className="inline" />
-                    {getMinimumFare(train)}
+                    {formatFare(getMinimumFare(train))}
                   </p>
                 </div>
                 {expandedTrain === train._id ? <FaChevronUp /> : <FaChevronDown />}
@@ -182,6 +253,19 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
           {/* Expanded Details */}
           {expandedTrain === train._id && train.journey && (
             <div className="border-t border-gray-200 p-4">
+              {/* Route Warning - Show when displaying the full route instead of the specific route */}
+              {train.journey.isFullRoute && fromStation && toStation && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-700 text-sm">
+                  <div className="flex items-start">
+                    <FaRoute className="mt-0.5 mr-2 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">Showing full train route</p>
+                      <p>We couldn't find your exact stations or they're in the wrong order. Displaying the complete journey from the first to last station.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Route Details */}
               <div className="mb-4">
                 <h4 className="text-md font-semibold mb-2 flex items-center gap-2">
@@ -247,71 +331,29 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
                 </div>
               </div>
 
-{/* we are not adding this here, */}
               {/* Classes and Fares */}
-              {/* <div>
-                <h4 className="text-md font-semibold mb-2 flex items-center gap-2">
-                  <MdAirlineSeatReclineNormal className="text-blue-600" />
-                  Available Classes
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {train.classes.map((cls) => {
-                    const isSelected = classType === cls;
-                    const fare = train.journey.fares?.[cls] || 'N/A';
-                    const seats = train.availableSeats?.[cls] || 0;
-                    const description = getClassDescription(cls);
-                    
-                    return (
-                      <div 
-                        key={cls} 
-                        className={`
-                          ${isSelected 
-                            ? 'bg-blue-50 border-2 border-blue-500 shadow-md' 
-                            : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
-                          } 
-                          p-4 rounded-lg transition-all duration-300 flex flex-col
-                        `}
-                      >
-                        <div className="flex justify-between items-start mb-1">
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-gray-800">{getClassLabel(cls)}</span>
-                            <span className="text-xs text-gray-500">({cls})</span>
-                          </div>
-                          {isSelected && (
-                            <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
-                              Selected
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="mt-2 flex items-center gap-2">
-                          <FaRupeeSign className="text-green-600" />
-                          <span className="font-bold text-green-600 text-lg">{fare}</span>
-                        </div>
-                        
-                        <div className="mt-1 flex justify-between items-center">
-                          <div className="flex items-center text-sm">
-                            <span className={`${seats > 0 ? 'text-green-600' : 'text-red-500'} font-medium`}>
-                              {seats > 0 ? `${seats} seats` : 'Not available'}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <p className="text-xs text-gray-600 mt-2">{description}</p>
-                        
-                        {isSelected && (
-                          <Link
-                            to={`/trains/${train._id}/${train.journey.fromStation.stationCode}/${train.journey.toStation.stationCode}/${getJourneyDate()}?book=true&class=${cls}`}
-                            className="mt-2 text-center text-sm bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 transition-colors duration-200"
-                          >
-                            Book {getClassLabel(cls)}
-                          </Link>
-                        )}
-                      </div>
-                    );
-                  })}
+              <div className="mt-6 border-t border-gray-100 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Available Classes & Fares:</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {train.classes.map((cls) => (
+                    <div key={cls} className="border border-gray-200 rounded-md p-3 hover:border-blue-500 transition-colors">
+                      <p className="font-medium">{getClassLabel(cls)}</p>
+                      <p className="text-green-600 font-semibold flex items-center">
+                        <FaRupeeSign className="mr-1 text-xs" />
+                        {train.journey.fares && train.journey.fares[cls] 
+                          ? train.journey.fares[cls] 
+                          : Math.ceil(train.journey.distance * train.farePerKm[cls])}
+                      </p>
+                      {/* Show available seats if available */}
+                      {train.availableSeats && train.availableSeats[cls] && (
+                        <p className="text-xs text-gray-500">
+                          {train.availableSeats[cls]} seats available
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </div> */}
+              </div>
 
               {/* Amenities */}
               {train.amenities && train.amenities.length > 0 && (

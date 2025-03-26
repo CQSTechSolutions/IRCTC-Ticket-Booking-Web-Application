@@ -3,8 +3,8 @@ import { FaSearch, FaExchangeAlt, FaCalendarAlt, FaTimes } from 'react-icons/fa'
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
-// Class types with descriptions
-const CLASS_TYPES = [
+// Class types with descriptions - will be used as fallback
+const FALLBACK_CLASS_TYPES = [
   { code: "1A", name: "AC First Class (1A)", description: "Most premium class with lockable, carpeted cabins" },
   { code: "2A", name: "AC 2 Tier (2A)", description: "Air-conditioned coaches with 2-tier berths" },
   { code: "3A", name: "AC 3 Tier (3A)", description: "Air-conditioned coaches with 3-tier berths" },
@@ -14,16 +14,35 @@ const CLASS_TYPES = [
   { code: "GN", name: "General (GN)", description: "Unreserved general coaches" }
 ];
 
+// Fallback stations in case API fails
+const FALLBACK_STATIONS = [
+  { code: 'NDLS', name: 'New Delhi' },
+  { code: 'HWH', name: 'Howrah' },
+  { code: 'MMCT', name: 'Mumbai Central' },
+  { code: 'MAS', name: 'Chennai Central' },
+  { code: 'SBC', name: 'Bangalore' },
+  { code: 'PRYJ', name: 'Prayagraj Junction' },
+  { code: 'BZA', name: 'Vijayawada Junction' },
+  { code: 'PUNE', name: 'Pune Junction' },
+  { code: 'HYB', name: 'Hyderabad' },
+  { code: 'ADI', name: 'Ahmedabad' }
+];
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
 const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => {
   const [fromStation, setFromStation] = useState(initialValues.fromStation || '');
   const [toStation, setToStation] = useState(initialValues.toStation || '');
   const [date, setDate] = useState(initialValues.date || getCurrentDate());
   const [classType, setClassType] = useState(initialValues.classType || '');
-  const [stations, setStations] = useState([]);
-  const [filteredFromStations, setFilteredFromStations] = useState([]);
-  const [filteredToStations, setFilteredToStations] = useState([]);
+  const [stations, setStations] = useState([...FALLBACK_STATIONS, ...popularStations]);
+  const [filteredFromStations, setFilteredFromStations] = useState([...FALLBACK_STATIONS, ...popularStations]);
+  const [filteredToStations, setFilteredToStations] = useState([...FALLBACK_STATIONS, ...popularStations]);
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [classTypes, setClassTypes] = useState(FALLBACK_CLASS_TYPES);
+  const [availableClassTypes, setAvailableClassTypes] = useState([]);
   const searchFormRef = useRef(null);
 
   // Get current date in YYYY-MM-DD format
@@ -48,44 +67,119 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
     return `${year}-${month}-${day}`;
   }
 
-  // Fetch all stations when component mounts
+  // Fetch all stations and class types when component mounts
   useEffect(() => {
-    const fetchStations = async () => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      
       try {
-        const response = await axios.get('http://localhost:3000/api/trains');
-        if (response.data && response.data.data) {
-          // Create a Map to store unique stations using a composite key of code and name
-          const stationsMap = new Map();
+        // Try getting stations from all trains
+        const trainsResponse = await axios.get(`${API_URL}/trains`);
+        if (trainsResponse.data && trainsResponse.data.data) {
+          // Extract unique stations from all trains
+          const uniqueStations = new Set();
+          const uniqueClassTypes = new Set();
           
-          response.data.data.forEach(train => {
+          trainsResponse.data.data.forEach(train => {
+            // Add stations to set
             train.stations.forEach(station => {
-              const key = `${station.stationCode}-${station.stationName}`;
-              if (!stationsMap.has(key)) {
-                stationsMap.set(key, {
-                  code: station.stationCode,
-                  name: station.stationName
-                });
-              }
+              uniqueStations.add(JSON.stringify({
+                code: station.stationCode,
+                name: station.stationName
+              }));
             });
+            
+            // Add class types from each train
+            if (train.classes && Array.isArray(train.classes)) {
+              train.classes.forEach(classCode => uniqueClassTypes.add(classCode));
+            }
           });
-
-          // Convert Map values to array
-          const stationsList = Array.from(stationsMap.values());
           
-          // Sort stations by code
-          stationsList.sort((a, b) => a.code.localeCompare(b.code));
+          // Process stations
+          const stationsList = Array.from(uniqueStations).map(station => JSON.parse(station));
           
-          setStations(stationsList);
-          setFilteredFromStations(stationsList);
-          setFilteredToStations(stationsList);
+          // Merge with fallback stations to ensure we have data
+          const mergedStations = [...stationsList, ...FALLBACK_STATIONS, ...popularStations];
+          
+          // Remove duplicates by code
+          const uniqueByCode = mergedStations.filter((station, index, self) =>
+            index === self.findIndex((s) => s.code === station.code)
+          );
+          
+          setStations(uniqueByCode);
+          setFilteredFromStations(uniqueByCode);
+          setFilteredToStations(uniqueByCode);
+          
+          // Process class types
+          const availableClasses = Array.from(uniqueClassTypes);
+          setAvailableClassTypes(availableClasses);
+          
+          // Filter full class types data based on available classes
+          const filteredClassTypes = FALLBACK_CLASS_TYPES.filter(
+            classType => availableClasses.includes(classType.code)
+          );
+          
+          // If we have at least one class type, update the state
+          if (filteredClassTypes.length > 0) {
+            setClassTypes(filteredClassTypes);
+          }
         }
       } catch (error) {
-        console.error('Error fetching stations:', error);
-        toast.error('Failed to fetch stations');
+        console.error('Error fetching data:', error);
+        // Already using fallback data from initialization
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchStations();
-  }, []);
+    
+    fetchData();
+  }, [popularStations]);
+
+  // Fetch class types for selected route when both stations are selected
+  useEffect(() => {
+    const fetchAvailableClasses = async () => {
+      if (fromStation && toStation && fromStation !== toStation) {
+        try {
+          setIsLoading(true);
+          
+          // Search available trains for this route to get available classes
+          const searchResponse = await axios.get(`${API_URL}/trains/search`, {
+            params: { fromStation, toStation }
+          });
+          
+          if (searchResponse.data?.success && searchResponse.data.data.length > 0) {
+            // Collect all unique class types available on this route
+            const uniqueClasses = new Set();
+            
+            searchResponse.data.data.forEach(train => {
+              if (train.classes && Array.isArray(train.classes)) {
+                train.classes.forEach(cls => uniqueClasses.add(cls));
+              }
+            });
+            
+            const availableClasses = Array.from(uniqueClasses);
+            
+            // Only update if we found classes
+            if (availableClasses.length > 0) {
+              setAvailableClassTypes(availableClasses);
+              
+              // Reset class selection if current selection is not available
+              if (classType && !availableClasses.includes(classType)) {
+                setClassType('');
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching available classes:', error);
+          // Keep using all classes as fallback
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    
+    fetchAvailableClasses();
+  }, [fromStation, toStation]);
 
   useEffect(() => {
     // Handle clicks outside the search form
@@ -180,6 +274,11 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
       classType
     });
   };
+
+  // Filter class types based on available options
+  const displayedClassTypes = availableClassTypes.length > 0
+    ? classTypes.filter(cls => availableClassTypes.includes(cls.code))
+    : classTypes;
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
@@ -305,13 +404,15 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Classes</option>
-              {CLASS_TYPES.map(cls => (
-                <option key={cls.code} value={cls.code}>{cls.name}</option>
+              {displayedClassTypes.map(cls => (
+                <option key={cls.code} value={cls.code}>
+                  {cls.name}
+                </option>
               ))}
             </select>
             {classType && (
               <p className="text-sm text-gray-600 mt-1">
-                {CLASS_TYPES.find(c => c.code === classType)?.description}
+                {displayedClassTypes.find(c => c.code === classType)?.description}
               </p>
             )}
           </div>
@@ -321,10 +422,22 @@ const TrainSearch = ({ onSearch, popularStations = [], initialValues = {} }) => 
         <button
           type="submit"
           className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={!fromStation || !toStation}
+          disabled={!fromStation || !toStation || isLoading}
         >
-          <FaSearch />
-          <span>Search Trains</span>
+          {isLoading ? (
+            <>
+              <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>Searching...</span>
+            </>
+          ) : (
+            <>
+              <FaSearch />
+              <span>Search Trains</span>
+            </>
+          )}
         </button>
       </form>
     </div>

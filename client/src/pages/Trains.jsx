@@ -6,7 +6,7 @@ import TrainList from '../components/trains/TrainList';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { toast } from 'react-hot-toast';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // Popular stations for quick selection
 const POPULAR_STATIONS = [
@@ -24,6 +24,7 @@ const Trains = () => {
   const [trains, setTrains] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [apiRetries, setApiRetries] = useState(0);
 
   // Get current date in YYYY-MM-DD format
   const getCurrentDate = () => {
@@ -38,20 +39,40 @@ const Trains = () => {
   const fromStation = searchParams.get('fromStation') || '';
   const toStation = searchParams.get('toStation') || '';
   const date = searchParams.get('date') || getCurrentDate();
+  const classType = searchParams.get('classType') || '';
 
-  const fetchAllTrains = async () => {
+  useEffect(() => {
+    // Load initial trains or search results based on URL parameters
+    if (fromStation && toStation) {
+      searchTrains({
+        fromStation,
+        toStation,
+        date,
+        classType
+      });
+    } else {
+      // Load all trains or popular routes
+      fetchInitialTrains();
+    }
+  }, []);
+
+  const fetchInitialTrains = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${API_BASE_URL}/trains`);
       
-      if (response.data?.success && response.data.data) {
-        // Transform each train to include journey details
+      const response = await axios.get(`${API_URL}/trains`, {
+        params: { limit: 20 }
+      });
+      
+      if (response.data && response.data.data) {
+        // Transform each train to include journey details for the entire route
         const transformedTrains = response.data.data.map(train => {
+          // Always use first and last station for full journey details
           const firstStation = train.stations[0];
           const lastStation = train.stations[train.stations.length - 1];
           
-          // Calculate duration
+          // Calculate duration for the entire journey
           const duration = calculateDuration(
             firstStation.departureTime,
             lastStation.arrivalTime,
@@ -59,14 +80,24 @@ const Trains = () => {
             lastStation.day
           );
           
+          // Calculate total distance
+          const totalDistance = lastStation.distance - firstStation.distance;
+          
+          // Calculate fares for all available classes for the entire journey
+          const fares = {};
+          train.classes.forEach(cls => {
+            fares[cls] = Math.ceil(totalDistance * train.farePerKm[cls]);
+          });
+          
           return {
             ...train,
             journey: {
               fromStation: firstStation,
               toStation: lastStation,
-              distance: lastStation.distance - firstStation.distance,
+              distance: totalDistance,
               duration,
-              intermediateStations: train.stations.slice(1, -1)
+              intermediateStations: train.stations.slice(1, -1),
+              fares
             }
           };
         });
@@ -74,15 +105,52 @@ const Trains = () => {
         setTrains(transformedTrains);
       } else {
         setTrains([]);
-        setError('No trains available');
       }
-    } catch (error) {
-      console.error('Error fetching trains:', error);
-      setError('Failed to fetch trains. Please try again.');
-      toast.error(error.response?.data?.message || 'Failed to fetch trains');
-      setTrains([]);
-    } finally {
+      
       setLoading(false);
+    } catch (error) {
+      console.error('Error fetching initial trains:', error);
+      handleApiError(error);
+    }
+  };
+
+  const handleApiError = (error) => {
+    setLoading(false);
+    
+    if (error.code === 'ERR_NETWORK' && apiRetries < 3) {
+      // Network error - retry up to 3 times with increasing delay
+      setApiRetries(prev => prev + 1);
+      const retryDelay = 1000 * apiRetries; // 1s, 2s, 3s
+      
+      toast.error(`Connection error. Retrying in ${retryDelay/1000} seconds...`);
+      
+      setTimeout(() => {
+        if (fromStation && toStation) {
+          searchTrains({
+            fromStation,
+            toStation,
+            date,
+            classType
+          });
+        } else {
+          fetchInitialTrains();
+        }
+      }, retryDelay);
+      
+      setError("Server connection error. Retrying...");
+    } else if (error.response) {
+      // Server responded with error
+      const statusCode = error.response.status;
+      if (statusCode === 404) {
+        setError("No trains found for this route. Please try different stations.");
+      } else if (statusCode >= 500) {
+        setError("Server error. Please try again later.");
+      } else {
+        setError(error.response.data?.message || "Error fetching trains");
+      }
+    } else {
+      // Other errors
+      setError("Unable to connect to the server. Please check your internet connection and try again.");
     }
   };
 
@@ -104,10 +172,12 @@ const Trains = () => {
     try {
       setLoading(true);
       setError(null);
+      setApiRetries(0);
       
       // Validate station codes
       if (!params.fromStation || !params.toStation) {
         toast.error('Please select both stations');
+        setLoading(false);
         return;
       }
 
@@ -118,25 +188,64 @@ const Trains = () => {
       setSearchParams({ 
         fromStation: params.fromStation, 
         toStation: params.toStation, 
-        date: searchDate
+        date: searchDate,
+        ...(params.classType && { classType: params.classType })
       });
 
-      const response = await axios.get(`${API_BASE_URL}/trains/search`, {
+      const response = await axios.get(`${API_URL}/trains/search`, {
         params: {
           fromStation: params.fromStation,
           toStation: params.toStation,
-          date: searchDate
+          date: searchDate,
+          ...(params.classType && { classType: params.classType })
         }
       });
 
-      if (response.data?.success && response.data.data) {
-        // Transform the response data to include proper journey details
+      if (response.data && response.data.data) {
+        // Transform the train data to include journey details
         const transformedTrains = response.data.data.map(train => {
+          // Try to find specific route stations
           const fromStationIndex = train.stations.findIndex(s => s.stationCode === params.fromStation);
           const toStationIndex = train.stations.findIndex(s => s.stationCode === params.toStation);
           
-          if (fromStationIndex === -1 || toStationIndex === -1) return null;
+          // If we can't find specific stations or they're in wrong order, use full route
+          if (fromStationIndex === -1 || toStationIndex === -1 || fromStationIndex >= toStationIndex) {
+            // Use full route instead
+            const firstStation = train.stations[0];
+            const lastStation = train.stations[train.stations.length - 1];
+            
+            // Calculate duration for the entire journey
+            const duration = calculateDuration(
+              firstStation.departureTime,
+              lastStation.arrivalTime,
+              firstStation.day,
+              lastStation.day
+            );
+            
+            // Calculate total distance
+            const totalDistance = lastStation.distance - firstStation.distance;
+            
+            // Calculate fares for all available classes for the entire journey
+            const fares = {};
+            train.classes.forEach(cls => {
+              fares[cls] = Math.ceil(totalDistance * train.farePerKm[cls]);
+            });
+            
+            return {
+              ...train,
+              journey: {
+                fromStation: firstStation,
+                toStation: lastStation,
+                distance: totalDistance,
+                duration,
+                intermediateStations: train.stations.slice(1, -1),
+                fares,
+                isFullRoute: true // Flag to indicate we're showing the full route
+              }
+            };
+          }
           
+          // Use specific route information
           const fromStation = train.stations[fromStationIndex];
           const toStation = train.stations[toStationIndex];
           
@@ -165,50 +274,28 @@ const Trains = () => {
               distance,
               duration,
               fares,
-              intermediateStations: train.stations.slice(fromStationIndex + 1, toStationIndex)
+              intermediateStations: train.stations.slice(fromStationIndex + 1, toStationIndex),
+              isFullRoute: false
             }
           };
-        }).filter(Boolean); // Remove null entries
+        });
         
         setTrains(transformedTrains);
         
         if (transformedTrains.length === 0) {
-          toast.error('No trains found for this route');
+          setError('No trains found for this route and date. Please try different stations or dates.');
         }
       } else {
         setTrains([]);
-        setError('No trains available for this route');
+        setError('No trains found. Please try a different search.');
       }
+      
+      setLoading(false);
     } catch (error) {
       console.error('Error searching trains:', error);
-      const errorMessage = error.response?.data?.message || 
-                          'Failed to search trains. Please try again later.';
-      setError(errorMessage);
-      toast.error(errorMessage);
-      setTrains([]);
-    } finally {
-      setLoading(false);
+      handleApiError(error);
     }
   };
-
-  // Initial data fetch based on URL params
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        if (fromStation && toStation) {
-          await searchTrains({ fromStation, toStation, date });
-        } else {
-          await fetchAllTrains();
-        }
-      } catch (error) {
-        console.error('Error initializing data:', error);
-        setError('Failed to initialize data');
-        setTrains([]);
-      }
-    };
-
-    initializeData();
-  }, []); // Empty dependency array for initial load only
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -219,15 +306,27 @@ const Trains = () => {
           initialValues={{ 
             fromStation, 
             toStation, 
-            date: date || getCurrentDate()
+            date: date || getCurrentDate(),
+            classType
           }}
         />
 
         {loading ? (
           <LoadingSpinner size="large" className="py-20" />
         ) : error ? (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg text-center">
-            {error}
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg my-4 text-center">
+            <p className="text-lg">{error}</p>
+            <button 
+              onClick={() => searchTrains({
+                fromStation, 
+                toStation, 
+                date: date || getCurrentDate(),
+                classType
+              })}
+              className="mt-3 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+            >
+              Retry Search
+            </button>
           </div>
         ) : (
           <>
@@ -241,12 +340,13 @@ const Trains = () => {
               </h3>
               <p className="text-gray-600">
                 {trains.length} trains found
-                {fromStation && toStation && ` • ${new Date(date).toLocaleDateString('en-US', {
+                {fromStation && toStation && date && ` • ${new Date(date).toLocaleDateString('en-US', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric'
                 })}`}
+                {classType && ` • Class: ${classType}`}
               </p>
             </div>
             
