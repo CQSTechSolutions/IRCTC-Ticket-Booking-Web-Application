@@ -16,6 +16,7 @@ import LoyalityPage from "./pages/LoyalityPage";
 import MealsPage from "./pages/MealsPage";
 import PromotionsPage from "./pages/PromotionsPage";
 import ContactPage from "./pages/ContactPage";
+import TrainBookingChatbot from "./pages/TrainBookingChatbot";
 
 const App = () =>{
   const navigate = useNavigate();
@@ -54,6 +55,7 @@ const App = () =>{
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/disha" element={<TrainBookingChatbot />} />
         <Route path="/register" element={<Register />} />
         <Route path="/trains" element={<Trains />} />
         <Route path="/trains/:trainId/:fromStation/:toStation/:date" element={<TrainDetails />} />
