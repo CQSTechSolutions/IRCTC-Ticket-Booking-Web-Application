@@ -427,11 +427,8 @@ export const updateBookingStatus = async (req, res) => {
             });
         }
 
-        const booking = await Booking.findByIdAndUpdate(
-            id,
-            { status },
-            { new: true, runValidators: true }
-        );
+        // Find the booking first
+        const booking = await Booking.findById(id);
 
         if (!booking) {
             return res.status(404).json({
@@ -439,6 +436,18 @@ export const updateBookingStatus = async (req, res) => {
                 message: 'Booking not found'
             });
         }
+
+        // Update passenger ticket statuses to match booking status
+        // Except for cancellations which might be selective
+        if (status !== 'Cancelled') {
+            booking.passengers.forEach(passenger => {
+                passenger.ticketStatus = status;
+            });
+        }
+
+        // Update the booking status
+        booking.status = status;
+        await booking.save();
 
         res.status(200).json({
             success: true,
@@ -450,6 +459,84 @@ export const updateBookingStatus = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to update booking status',
+            error: error.message
+        });
+    }
+};
+
+// Update passenger ticket status
+export const updatePassengerStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { passengerIndex, ticketStatus } = req.body;
+        
+        // Validate if id is a valid ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid booking ID format'
+            });
+        }
+
+        // Validate passenger index
+        if (passengerIndex === undefined || passengerIndex < 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid passenger index'
+            });
+        }
+
+        // Validate ticket status
+        const validTicketStatuses = ['Confirmed', 'Waiting', 'RAC', 'Cancelled'];
+        if (!validTicketStatuses.includes(ticketStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ticket status value'
+            });
+        }
+
+        // Find the booking
+        const booking = await Booking.findById(id);
+
+        if (!booking) {
+            return res.status(404).json({
+                success: false,
+                message: 'Booking not found'
+            });
+        }
+
+        // Check if passenger exists
+        if (passengerIndex >= booking.passengers.length) {
+            return res.status(404).json({
+                success: false,
+                message: 'Passenger not found'
+            });
+        }
+
+        // Update passenger ticket status
+        booking.passengers[passengerIndex].ticketStatus = ticketStatus;
+        
+        // If all passengers are cancelled, update the entire booking status
+        if (ticketStatus === 'Cancelled') {
+            const allCancelled = booking.passengers.every(p => p.ticketStatus === 'Cancelled');
+            if (allCancelled) {
+                booking.status = 'Cancelled';
+            }
+        }
+        
+        // Save the updated booking
+        await booking.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Passenger ticket status updated successfully',
+            data: booking
+        });
+    } catch (error) {
+        console.error('Error updating passenger ticket status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update passenger ticket status',
             error: error.message
         });
     }

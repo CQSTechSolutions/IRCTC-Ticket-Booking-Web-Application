@@ -32,17 +32,25 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
   const calculateDuration = (fromTime, toTime, fromDay, toDay) => {
     try {
       // Handle missing inputs
-      if (!fromTime || !toTime || fromDay === undefined || toDay === undefined) {
+      if (!fromTime || !toTime) {
         return { hours: 0, minutes: 0 };
       }
       
-      // Ensure fromDay and toDay are numbers
-      const startDay = parseInt(fromDay) || 1;
-      const endDay = parseInt(toDay) || 1;
+      // Ensure fromDay and toDay are valid numbers
+      const startDay = Number.isInteger(parseInt(fromDay)) ? parseInt(fromDay) : 1;
+      const endDay = Number.isInteger(parseInt(toDay)) ? parseInt(toDay) : 1;
+      
+      // Validate time format (should be HH:MM:SS or HH:MM)
+      const timeRegex = /^([01]?[0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?$/;
+      if (!timeRegex.test(fromTime) || !timeRegex.test(toTime)) {
+        console.error('Invalid time format:', { fromTime, toTime });
+        return { hours: 0, minutes: 0 };
+      }
       
       // Create valid date objects
-      const startDate = new Date(`2024-01-${startDay}T${fromTime}`);
-      const endDate = new Date(`2024-01-${endDay}T${toTime}`);
+      const baseDate = '2024-01-';
+      const startDate = new Date(`${baseDate}${startDay}T${fromTime}`);
+      const endDate = new Date(`${baseDate}${endDay}T${toTime}`);
       
       // Check if dates are valid
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
@@ -53,14 +61,14 @@ const TrainList = ({ trains, fromStation, toStation, classType }) => {
       // Handle days correctly - if endDay < startDay, assume crossing to next month
       let adjustedEndDate = new Date(endDate);
       if (endDay < startDay) {
-        adjustedEndDate.setMonth(adjustedEndDate.getMonth() + 1);
+        adjustedEndDate.setDate(adjustedEndDate.getDate() + 30);
       }
       
       // Calculate time difference in milliseconds
       const diff = adjustedEndDate - startDate;
       if (diff < 0) {
-        // If still negative, adjust by adding days until positive
-        adjustedEndDate.setDate(adjustedEndDate.getDate() + 30);
+        // If still negative, adjust by adding days
+        adjustedEndDate.setDate(adjustedEndDate.getDate() + (diff < 0 ? 1 : 0));
         const newDiff = adjustedEndDate - startDate;
         const hours = Math.floor(newDiff / (1000 * 60 * 60));
         const minutes = Math.floor((newDiff % (1000 * 60 * 60)) / (1000 * 60));

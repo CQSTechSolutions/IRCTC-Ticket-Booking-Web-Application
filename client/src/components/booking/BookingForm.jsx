@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { FaPlus, FaMinus, FaTicketAlt, FaMoneyBillWave, FaCouch, FaInfoCircle, FaSnowflake } from 'react-icons/fa';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Class types with descriptions and capacities
 const CLASS_TYPES = [
@@ -123,6 +123,13 @@ const BookingForm = ({ train, selectedClass, fromStation, toStation, journeyDate
     e.preventDefault();
     
     try {
+      // Validation
+      if (!validateForm()) {
+        return;
+      }
+
+      setIsLoading(true);
+
       // Get token and user data
       const token = localStorage.getItem('token');
       const userString = localStorage.getItem('user');
@@ -161,13 +168,15 @@ const BookingForm = ({ train, selectedClass, fromStation, toStation, journeyDate
           name: p.name.trim(),
           age: parseInt(p.age),
           gender: p.gender,
-          berthPreference: p.berth
+          berthPreference: p.berth,
+          ticketStatus: 'Confirmed'
         })),
         totalFare,
         userId: user._id,
         trainNumber: train.trainNumber,
         trainName: train.trainName,
-        bookingStatus: 'confirmed',
+        status: 'Confirmed',
+        paymentStatus: 'Completed',
         bookingDate: new Date().toISOString(),
         distance: train.journey.distance,
         duration: train.journey.duration
@@ -184,10 +193,12 @@ const BookingForm = ({ train, selectedClass, fromStation, toStation, journeyDate
       console.log('Class Type:', bookingData.classType);
       console.log('Passengers:', bookingData.passengers);
       console.log('Total Fare:', bookingData.totalFare);
+      console.log('Status:', bookingData.status);
+      console.log('Payment Status:', bookingData.paymentStatus);
       console.log('Complete Booking Data:', bookingData);
       console.log('========================');
 
-      const response = await axios.post('http://localhost:3000/api/bookings/create', bookingData);
+      const response = await axios.post(`${API_BASE_URL}/bookings/create`, bookingData);
 
       if (response.data?.success) {
         toast.success('Booking successful!');
@@ -200,6 +211,8 @@ const BookingForm = ({ train, selectedClass, fromStation, toStation, journeyDate
       console.error('Error Response:', error.response?.data);
       const errorMessage = error.response?.data?.message || error.message || 'Booking failed';
       toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 

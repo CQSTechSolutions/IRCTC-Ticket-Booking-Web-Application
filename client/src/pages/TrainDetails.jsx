@@ -6,7 +6,7 @@ import { FaArrowLeft, FaCalendarAlt, FaClock, FaRoute, FaMapMarkerAlt, FaTrain, 
 import BookingForm from '../components/booking/BookingForm';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Class types with descriptions and capacities
 const CLASS_TYPES = [
@@ -67,6 +67,7 @@ const TrainDetails = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
         
         // Get current user from localStorage
         const userString = localStorage.getItem('user');
@@ -83,7 +84,24 @@ const TrainDetails = () => {
         }
         
         // Fetch train details
-        const response = await axios.get(`${API_BASE_URL}/trains/${trainId}`);
+        const response = await axios.get(`${API_BASE_URL}/trains/${trainId}`)
+          .catch(error => {
+            if (error.code === 'ERR_NETWORK') {
+              throw new Error('Network error: Unable to connect to the server. Please check your internet connection.');
+            }
+            if (error.response) {
+              if (error.response.status === 404) {
+                throw new Error('Train not found. The requested train may not exist or has been removed.');
+              } else if (error.response.status >= 500) {
+                throw new Error('Server error: Please try again later or contact support.');
+              }
+            }
+            throw error;
+          });
+        
+        if (!response || !response.data) {
+          throw new Error('Empty response from server. Please try again.');
+        }
         
         if (response.data.success && response.data.data) {
           const trainData = response.data.data;
@@ -100,53 +118,98 @@ const TrainDetails = () => {
               
               // Calculate journey details
               const distance = to.distance - from.distance;
-              const fromTime = new Date(`2000-01-01T${from.departureTime}`);
-              const toTime = new Date(`2000-01-01T${to.arrivalTime}`);
-              let duration = (toTime - fromTime) / (1000 * 60); // in minutes
               
-              // Adjust for day changes
-              duration += (to.day - from.day) * 24 * 60;
-              
-              // Calculate fares for each class
-              const fares = {};
-              trainData.classes.forEach(cls => {
-                fares[cls] = Math.ceil(distance * trainData.farePerKm[cls]);
-              });
-              
-              // Get intermediate stations
-              const fromIndex = trainData.stations.findIndex(s => s.stationCode === fromStation);
-              const toIndex = trainData.stations.findIndex(s => s.stationCode === toStation);
-              const intermediateStations = trainData.stations.slice(fromIndex + 1, toIndex);
-              
-              // Set journey in train data
-              setTrain({
-                ...trainData,
-                journey: {
-                  fromStation: from,
-                  toStation: to,
-                  distance,
-                  duration: {
-                    hours: Math.floor(duration / 60),
-                    minutes: duration % 60
-                  },
-                  intermediateStations,
-                  fares
+              try {
+                // Validate time format
+                const timeRegex = /^([01]?[0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?$/;
+                if (!timeRegex.test(from.departureTime) || !timeRegex.test(to.arrivalTime)) {
+                  throw new Error('Invalid time format');
                 }
-              });
+                
+                const baseDate = '2000-01-01T';
+                const fromTime = new Date(`${baseDate}${from.departureTime}`);
+                const toTime = new Date(`${baseDate}${to.arrivalTime}`);
+                
+                if (isNaN(fromTime.getTime()) || isNaN(toTime.getTime())) {
+                  throw new Error('Invalid date objects');
+                }
+                
+                let duration = (toTime - fromTime) / (1000 * 60); // in minutes
+                
+                // Adjust for day changes
+                const fromDay = from.day || 1;
+                const toDay = to.day || 1;
+                duration += (toDay - fromDay) * 24 * 60;
+                
+                // Calculate fares for each class
+                const fares = {};
+                trainData.classes.forEach(cls => {
+                  fares[cls] = Math.ceil(distance * trainData.farePerKm[cls]);
+                });
+                
+                // Get intermediate stations
+                const fromIndex = trainData.stations.findIndex(s => s.stationCode === fromStation);
+                const toIndex = trainData.stations.findIndex(s => s.stationCode === toStation);
+                const intermediateStations = trainData.stations.slice(fromIndex + 1, toIndex);
+                
+                // Set journey in train data
+                setTrain({
+                  ...trainData,
+                  journey: {
+                    fromStation: from,
+                    toStation: to,
+                    distance,
+                    duration: {
+                      hours: Math.floor(duration / 60),
+                      minutes: duration % 60
+                    },
+                    intermediateStations,
+                    fares
+                  }
+                });
+              } catch (timeError) {
+                console.error('Error processing time data:', timeError);
+                
+                // Fallback to estimated duration
+                const estimatedHours = Math.floor(distance / 50); // Assume 50km/h average speed
+                const estimatedMinutes = Math.floor((distance % 50) / 50 * 60);
+                
+                // Set journey with fallback duration
+                setTrain({
+                  ...trainData,
+                  journey: {
+                    fromStation: from,
+                    toStation: to,
+                    distance,
+                    duration: {
+                      hours: estimatedHours,
+                      minutes: estimatedMinutes,
+                      isEstimated: true
+                    },
+                    intermediateStations: trainData.stations.slice(fromIndex + 1, toIndex),
+                    fares: Object.fromEntries(
+                      trainData.classes.map(cls => [cls, Math.ceil(distance * trainData.farePerKm[cls])])
+                    )
+                  }
+                });
+                
+                toast.warning('Using estimated journey time due to data issues');
+              }
             } else {
               setError('One or both stations are not in this train\'s route');
+              toast.error('Invalid route selection. Please choose stations along this train\'s route.');
             }
           } else {
             // No journey details, just show train info
             toast.info('Please select From and To stations for booking');
           }
         } else {
-          setError('Failed to fetch train details');
+          throw new Error(response.data?.message || 'Failed to fetch train details');
         }
       } catch (error) {
         console.error('Error fetching train details:', error);
-        setError('Failed to fetch train details');
-        toast.error('Failed to fetch train details');
+        setError(error.message || 'Failed to fetch train details. Please try again later.');
+        toast.error(error.message || 'Failed to fetch train details');
       } finally {
         setLoading(false);
       }
