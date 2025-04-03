@@ -6,7 +6,7 @@ import TrainList from '../components/trains/TrainList';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { toast } from 'react-hot-toast';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Popular stations for quick selection
 const POPULAR_STATIONS = [
@@ -156,14 +156,55 @@ const Trains = () => {
 
   const calculateDuration = (fromTime, toTime, fromDay, toDay) => {
     try {
-      const startDate = new Date(`2024-01-${fromDay}T${fromTime}`);
-      const endDate = new Date(`2024-01-${toDay}T${toTime}`);
-      const diff = endDate - startDate;
+      // Handle missing inputs
+      if (!fromTime || !toTime) {
+        return { hours: 0, minutes: 0 };
+      }
+      
+      // Ensure fromDay and toDay are valid numbers
+      const startDay = Number.isInteger(parseInt(fromDay)) ? parseInt(fromDay) : 1;
+      const endDay = Number.isInteger(parseInt(toDay)) ? parseInt(toDay) : 1;
+      
+      // Validate time format (should be HH:MM:SS or HH:MM)
+      const timeRegex = /^([01]?[0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?$/;
+      if (!timeRegex.test(fromTime) || !timeRegex.test(toTime)) {
+        console.error('Invalid time format:', { fromTime, toTime });
+        return { hours: 0, minutes: 0 };
+      }
+      
+      // Create valid date objects
+      const baseDate = '2024-01-';
+      const startDate = new Date(`${baseDate}${startDay}T${fromTime}`);
+      const endDate = new Date(`${baseDate}${endDay}T${toTime}`);
+      
+      // Check if dates are valid
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        console.error('Invalid date objects in calculateDuration', { fromTime, toTime, startDay, endDay });
+        return { hours: 0, minutes: 0 };
+      }
+      
+      // Handle days correctly - if endDay < startDay, assume crossing to next month
+      let adjustedEndDate = new Date(endDate);
+      if (endDay < startDay) {
+        adjustedEndDate.setDate(adjustedEndDate.getDate() + 30);
+      }
+      
+      // Calculate time difference in milliseconds
+      const diff = adjustedEndDate - startDate;
+      if (diff < 0) {
+        // If still negative, adjust by adding days
+        adjustedEndDate.setDate(adjustedEndDate.getDate() + (diff < 0 ? 1 : 0));
+        const newDiff = adjustedEndDate - startDate;
+        const hours = Math.floor(newDiff / (1000 * 60 * 60));
+        const minutes = Math.floor((newDiff % (1000 * 60 * 60)) / (1000 * 60));
+        return { hours, minutes };
+      }
+      
       const hours = Math.floor(diff / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       return { hours, minutes };
     } catch (error) {
-      console.error('Error calculating duration:', error);
+      console.error('Error calculating duration:', error, { fromTime, toTime, fromDay, toDay });
       return { hours: 0, minutes: 0 };
     }
   };

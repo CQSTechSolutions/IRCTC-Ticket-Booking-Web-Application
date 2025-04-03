@@ -7,7 +7,8 @@ import {
     cancelBooking,
     getAllBookings,
     updateBookingStatus,
-    updatePaymentStatus
+    updatePaymentStatus,
+    updatePassengerStatus
 } from '../controllers/bookingController.js';
 
 const router = express.Router();
@@ -18,6 +19,7 @@ router.get('/user/:userId', getUserBookings);
 router.get('/pnr/:pnr', getBookingByPNR);
 router.get('/:id', getBookingById);
 router.put('/cancel/:id', cancelBooking);
+router.put('/passenger/:id', updatePassengerStatus);
 
 // Admin routes
 router.get('/', getAllBookings);

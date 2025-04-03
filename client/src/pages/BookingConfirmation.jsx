@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { FaTrain, FaTicketAlt, FaMapMarkerAlt, FaCalendarAlt, FaUser, FaRupeeSign, FaPrint, FaDownload, FaCheck } from 'react-icons/fa';
+import { FaTrain, FaTicketAlt, FaMapMarkerAlt, FaCalendarAlt, FaUser, FaRupeeSign, FaPrint, FaDownload, FaCheck, FaTimes, FaClock, FaSpinner } from 'react-icons/fa';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Helper function to format time (e.g., "14:30")
 const formatTime = (timeString) => {
@@ -42,16 +42,32 @@ const ClassLabel = ({ classType }) => {
 // Component to show booking status with appropriate color
 const StatusBadge = ({ status }) => {
   let bgColor = 'bg-green-100 text-green-800';
+  let icon = null;
   
-  if (status === 'Cancelled') {
-    bgColor = 'bg-red-100 text-red-800';
-  } else if (status === 'Waiting') {
-    bgColor = 'bg-yellow-100 text-yellow-800';
+  switch (status) {
+    case 'Cancelled':
+      bgColor = 'bg-red-100 text-red-800';
+      icon = <FaTimes className="mr-1" />;
+      break;
+    case 'Waiting':
+    case 'Pending':
+    case 'Payment Pending':
+      bgColor = 'bg-yellow-100 text-yellow-800';
+      icon = <FaClock className="mr-1" />;
+      break;
+    case 'Processing':
+      bgColor = 'bg-blue-100 text-blue-800';
+      icon = <FaSpinner className="mr-1 animate-spin" />;
+      break;
+    case 'Confirmed':
+    default:
+      bgColor = 'bg-green-100 text-green-800';
+      icon = <FaCheck className="mr-1" />;
   }
   
   return (
     <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${bgColor}`}>
-      {status === 'Confirmed' && <FaCheck className="mr-1" />}
+      {icon}
       {status}
     </span>
   );
@@ -62,6 +78,7 @@ const BookingConfirmation = () => {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   
   useEffect(() => {
     const fetchBookingDetails = async () => {
@@ -93,6 +110,120 @@ const BookingConfirmation = () => {
   
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadTicket = () => {
+    try {
+      // Create a hidden canvas element
+      const ticketElement = document.querySelector('.max-w-4xl');
+      if (!ticketElement) {
+        toast.error('Could not find ticket element');
+        return;
+      }
+
+      // Use html2canvas to take screenshot of the ticket
+      import('html2canvas').then(html2canvas => {
+        html2canvas.default(ticketElement, {
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+        }).then(canvas => {
+          // Convert to PNG
+          const imgData = canvas.toDataURL('image/png');
+          
+          // Create download link
+          const downloadLink = document.createElement('a');
+          downloadLink.href = imgData;
+          downloadLink.download = `IRCTC_Ticket_${booking.pnr}.png`;
+          downloadLink.click();
+          
+          toast.success('Ticket downloaded successfully');
+        });
+      }).catch(error => {
+        console.error('Error loading html2canvas:', error);
+        toast.error('Failed to load download module');
+      });
+    } catch (error) {
+      console.error('Error downloading ticket:', error);
+      toast.error('Failed to download ticket');
+    }
+  };
+  
+  // Get the current status based on the most recent status update
+  const getCurrentStatus = () => {
+    if (!booking) return 'Processing';
+    
+    // If ticket is cancelled, show that first
+    if (booking.status === 'Cancelled') return 'Cancelled';
+    
+    // Check payment status
+    if (booking.paymentStatus !== 'Confirmed') return 'Payment Pending';
+    
+    // Default to booking status
+    return booking.status || 'Confirmed';
+  };
+  
+  // Update passenger ticket status
+  const updatePassengerStatus = async (passengerIndex, newStatus) => {
+    try {
+      setUpdatingStatus(true);
+      
+      if (!booking || !booking._id) {
+        toast.error('Booking information is missing');
+        return;
+      }
+      
+      // Get token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Please login to update ticket status');
+        return;
+      }
+      
+      // Set authorization header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      const response = await axios.put(`${API_BASE_URL}/bookings/passenger/${booking._id}`, {
+        passengerIndex,
+        ticketStatus: newStatus
+      });
+      
+      if (response.data?.success) {
+        setBooking(response.data.data);
+        toast.success(`Passenger ticket status updated to ${newStatus}`);
+      } else {
+        throw new Error(response.data?.message || 'Failed to update ticket status');
+      }
+    } catch (error) {
+      console.error('Error updating passenger status:', error);
+      toast.error(error.message || 'Failed to update ticket status');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+  
+  // Function to handle status update click
+  const handleStatusUpdate = (passengerIndex, currentStatus) => {
+    const statusOptions = ['Confirmed', 'Waiting', 'RAC', 'Cancelled'];
+    
+    // Show confirmation for cancellation
+    if (currentStatus !== 'Cancelled') {
+      if (window.confirm('Are you sure you want to cancel this ticket?')) {
+        updatePassengerStatus(passengerIndex, 'Cancelled');
+      }
+    } else {
+      // For other status changes, show options
+      const newStatus = prompt(
+        `Select new status (${statusOptions.join(', ')})`,
+        currentStatus
+      );
+      
+      if (newStatus && statusOptions.includes(newStatus) && newStatus !== currentStatus) {
+        updatePassengerStatus(passengerIndex, newStatus);
+      }
+    }
   };
   
   if (loading) {
@@ -132,11 +263,11 @@ const BookingConfirmation = () => {
               <div>
                 <h1 className="text-2xl font-bold text-gray-800 flex items-center">
                   <FaTicketAlt className="text-green-600 mr-2" />
-                  Booking Confirmed
+                  Booking {getCurrentStatus()}
                 </h1>
-                <p className="text-gray-600">Your booking has been confirmed. Save the details for your reference.</p>
+                <p className="text-gray-600">Your booking has been {getCurrentStatus().toLowerCase()}. Save the details for your reference.</p>
               </div>
-              <StatusBadge status={booking.status} />
+              <StatusBadge status={getCurrentStatus()} />
             </div>
             
             <div className="hidden print:block">
@@ -288,7 +419,13 @@ const BookingConfirmation = () => {
                         {passenger.berth || 'Any'}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <StatusBadge status={passenger.ticketStatus || 'Confirmed'} />
+                        <button 
+                          className="focus:outline-none"
+                          onClick={() => handleStatusUpdate(index, passenger.ticketStatus || 'Confirmed')}
+                          disabled={updatingStatus || booking.status === 'Cancelled'}
+                        >
+                          <StatusBadge status={passenger.ticketStatus || 'Confirmed'} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -353,6 +490,7 @@ const BookingConfirmation = () => {
                 Print
               </button>
               <button
+                onClick={handleDownloadTicket}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
                 <FaDownload className="mr-2" />
