@@ -1,0 +1,87 @@
+[
+  {
+    "id": "12301",
+    "name": "Rajdhani Express",
+    "source": "New Delhi",
+    "destination": "Howrah",
+    "departureTime": "16:55",
+    "arrivalTime": "10:00",
+    "duration": "17h 05m",
+    "distance": "1451 km",
+    "classesFare": {
+      "1A": 3800,
+      "2A": 2200,
+      "3A": 1520,
+      "SL": 740
+    },
+    "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+  },
+  {
+    "id": "12259",
+    "name": "Sealdah Duronto Express",
+    "source": "New Delhi",
+    "destination": "Sealdah",
+    "departureTime": "12:40",
+    "arrivalTime": "06:20",
+    "duration": "17h 40m",
+    "distance": "1458 km",
+    "classesFare": {
+      "1A": 3935,
+      "2A": 2275,
+      "3A": 1600,
+      "SL": 780
+    },
+    "days": ["Mon", "Wed", "Fri"]
+  },
+  {
+    "id": "12951",
+    "name": "Mumbai Rajdhani",
+    "source": "New Delhi",
+    "destination": "Mumbai Central",
+    "departureTime": "16:25",
+    "arrivalTime": "08:25",
+    "duration": "16h 00m",
+    "distance": "1385 km",
+    "classesFare": {
+      "1A": 3650,
+      "2A": 2100,
+      "3A": 1480,
+      "SL": 720
+    },
+    "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+  },
+  {
+    "id": "12302",
+    "name": "Howrah Rajdhani",
+    "source": "Howrah",
+    "destination": "New Delhi",
+    "departureTime": "14:05",
+    "arrivalTime": "10:00",
+    "duration": "19h 55m",
+    "distance": "1451 km",
+    "classesFare": {
+      "1A": 3800,
+      "2A": 2200,
+      "3A": 1520,
+      "SL": 740
+    },
+    "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+  },
+  {
+    "id": "12622",
+    "name": "Tamil Nadu Express",
+    "source": "New Delhi",
+    "destination": "Chennai Central",
+    "departureTime": "22:30",
+    "arrivalTime": "06:45",
+    "duration": "32h 15m",
+    "distance": "2181 km",
+    "classesFare": {
+      "1A": 4950,
+      "2A": 2790,
+      "3A": 1950,
+      "SL": 920
+    },
+    "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+  }
+] 
