@@ -67,7 +67,7 @@ const Navbar = () => {
                 </>
             )}
             <Link to="/contact" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Contact Us</Link>
-            <Link to="/disha" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">Ask Disha</Link>
+            <Link to="/disha" className="text-sm font-medium hover:text-blue-200 transition-colors duration-300 px-2 py-1 hover:bg-blue-800 rounded">TrainMate</Link>
             <div className="relative group">
               <button className="flex items-center text-sm font-medium group-hover:text-blue-200 transition-colors duration-300">
                 <span>English</span>
